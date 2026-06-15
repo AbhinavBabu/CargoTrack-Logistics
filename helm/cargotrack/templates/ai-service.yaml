@@ -35,36 +35,23 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: {{ .Values.aiService.port }}
+          envFrom:
+            - configMapRef:
+                name: cargotrack-aws-config
           env:
             - name: NODE_ENV
               value: {{ .Values.aiService.env.NODE_ENV | quote }}
             - name: PORT
               value: {{ .Values.aiService.port | quote }}
-            - name: AWS_REGION
-              value: {{ .Values.global.region | quote }}
-            - name: AWS_DEFAULT_REGION
-              value: {{ .Values.global.region | quote }}
-            # AI mode: "true" = mock/rule-based, "false" = Bedrock Nova
             - name: MOCK_AGENT
               value: {{ .Values.aiService.env.MOCK_AGENT | quote }}
-            - name: DB_HOST
-              value: {{ .Values.aws.rdsEndpoint | quote }}
-            - name: DB_NAME
-              value: {{ .Values.aws.rdsDatabase | quote }}
-            - name: DB_USER
-              value: {{ .Values.aws.rdsUsername | quote }}
-            - name: DB_PORT
-              value: "5432"
-            - name: DB_SSL
-              value: "true"
-            - name: S3_BUCKET_NAME
-              value: {{ .Values.aws.s3BucketName | quote }}
-            - name: COMPLIANCE_QUEUE_URL
-              value: {{ .Values.aws.complianceQueueUrl | quote }}
-            - name: AUDIT_TABLE_NAME
-              value: {{ .Values.aws.auditTableName | quote }}
-            - name: DB_SECRET_ARN
-              value: {{ .Values.aws.dbSecretArn | quote }}
+            - name: TEXTRACT_ENABLED
+              value: {{ .Values.aiService.env.TEXTRACT_ENABLED | default "false" | quote }}
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cargotrack-secrets
+                  key: DATABASE_PASSWORD
           resources:
             {{- toYaml .Values.aiService.resources | nindent 12 }}
           readinessProbe:

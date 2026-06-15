@@ -70,3 +70,14 @@ output "kms_key_arn" {
   value       = module.database.kms_key_arn
   sensitive   = true
 }
+
+output "db_secret_arn" {
+  description = "Database secrets ARN"
+  value       = module.database.db_secret_arn
+}
+
+output "application_secret_arn" {
+  description = "Application secrets (JWT and admin creds) ARN"
+  value       = module.database.application_secret_arn
+}
+

@@ -35,41 +35,36 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: {{ .Values.documentService.port }}
+          envFrom:
+            - configMapRef:
+                name: cargotrack-aws-config
           env:
             - name: NODE_ENV
               value: {{ .Values.documentService.env.NODE_ENV | quote }}
             - name: PORT
               value: {{ .Values.documentService.port | quote }}
-            - name: AWS_REGION
-              value: {{ .Values.global.region | quote }}
-            - name: AWS_DEFAULT_REGION
-              value: {{ .Values.global.region | quote }}
-            - name: DB_HOST
-              value: {{ .Values.aws.rdsEndpoint | quote }}
-            - name: DB_NAME
-              value: {{ .Values.aws.rdsDatabase | quote }}
-            - name: DB_USER
-              value: {{ .Values.aws.rdsUsername | quote }}
-            - name: DB_PORT
-              value: "5432"
-            - name: DB_SSL
-              value: "true"
-            - name: S3_BUCKET_NAME
-              value: {{ .Values.aws.s3BucketName | quote }}
-            - name: DB_SECRET_ARN
-              value: {{ .Values.aws.dbSecretArn | quote }}
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cargotrack-secrets
+                  key: DATABASE_PASSWORD
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: cargotrack-secrets
+                  key: JWT_SECRET
           resources:
             {{- toYaml .Values.documentService.resources | nindent 12 }}
           readinessProbe:
             httpGet:
-              path: /api/documents/health
+              path: /api/health
               port: {{ .Values.documentService.port }}
             initialDelaySeconds: 15
             periodSeconds: 10
             failureThreshold: 3
           livenessProbe:
             httpGet:
-              path: /api/documents/health
+              path: /api/health
               port: {{ .Values.documentService.port }}
             initialDelaySeconds: 30
             periodSeconds: 30

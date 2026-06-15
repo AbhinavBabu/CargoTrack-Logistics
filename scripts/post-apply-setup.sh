@@ -24,12 +24,31 @@ CORE_ROLE=$(terraform output -raw irsa_core_service_role_arn)
 DOCS_ROLE=$(terraform output -raw irsa_document_service_role_arn)
 AI_ROLE=$(terraform output -raw irsa_ai_service_role_arn)
 ALB_ROLE=$(terraform output -raw irsa_alb_controller_role_arn)
+DB_SECRET_ARN=$(terraform output -raw db_secret_arn)
+APP_SECRET_ARN=$(terraform output -raw application_secret_arn)
+RDS_ENDPOINT=$(terraform output -raw rds_endpoint)
 
 echo "==> Configuring kubectl..."
 aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$REGION"
 
 echo "==> Verifying cluster nodes..."
 kubectl get nodes
+
+echo "==> Retrieving credentials from AWS Secrets Manager..."
+DB_SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id "$DB_SECRET_ARN" --region "$REGION" --query "SecretString" --output text)
+DB_PASS=$(echo "$DB_SECRET_JSON" | jq -r '.password')
+
+APP_SECRET_JSON=$(aws secretsmanager get-secret-value --secret-id "$APP_SECRET_ARN" --region "$REGION" --query "SecretString" --output text)
+JWT_SEC=$(echo "$APP_SECRET_JSON" | jq -r '.jwt_secret')
+ADMIN_PASS=$(echo "$APP_SECRET_JSON" | jq -r '.admin_password')
+
+echo "==> Creating Kubernetes Secret for CargoTrack..."
+kubectl create namespace cargotrack --dry-run=client -o yaml | kubectl apply -f -
+kubectl create secret generic cargotrack-secrets -n cargotrack \
+  --from-literal=DATABASE_PASSWORD="$DB_PASS" \
+  --from-literal=JWT_SECRET="$JWT_SEC" \
+  --from-literal=ADMIN_PASSWORD="$ADMIN_PASS" \
+  --dry-run=client -o yaml | kubectl apply -f -
 
 echo "==> Installing AWS Load Balancer Controller..."
 helm repo add eks https://aws.github.io/eks-charts --force-update
@@ -94,21 +113,22 @@ aiService:
     roleArn: "$AI_ROLE"
   env:
     MOCK_AGENT: "true"
+    TEXTRACT_ENABLED: "false"
 
 frontend:
   tag: latest
 
 aws:
   region: $REGION
-  rdsEndpoint: "$(cd $INFRA_DIR && terraform output -raw rds_endpoint)"
+  rdsEndpoint: "$RDS_ENDPOINT"
   rdsDatabase: cargotrack
   rdsUsername: cargotrack
   s3BucketName: "$S3_BUCKET"
   eventBusName: "$EVENT_BUS"
   complianceQueueUrl: "$COMPLIANCE_QUEUE"
   auditTableName: "$AUDIT_TABLE"
-  dbSecretArn: "$(cd $INFRA_DIR && terraform output -raw kms_key_arn | head -1 || echo '')"
-  appSecretArn: ""
+  dbSecretArn: "$DB_SECRET_ARN"
+  appSecretArn: "$APP_SECRET_ARN"
 EOF
 
 echo "==> values-dev.yaml updated!"

@@ -19,6 +19,7 @@ image:
 aiService:
   env:
     MOCK_AGENT: "true"
+    TEXTRACT_ENABLED: "false"
 
 # IRSA role ARNs — populated by inject-values script after terraform apply
 # DO NOT commit real ARNs — these are injected by CI/CD from terraform output

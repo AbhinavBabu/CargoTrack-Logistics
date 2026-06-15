@@ -80,6 +80,7 @@ aiService:
     NODE_ENV: production
     PORT: "4002"
     MOCK_AGENT: "true"   # Override to "false" when Bedrock access available
+    TEXTRACT_ENABLED: "false"
 
 # ── Frontend ──────────────────────────────────────────────────────────────────
 frontend:

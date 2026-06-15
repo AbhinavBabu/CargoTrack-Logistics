@@ -23,6 +23,11 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: {{ .Values.frontend.port }}
+          env:
+            - name: CORE_SERVICE_URL
+              value: "http://core-service:{{ .Values.coreService.port }}"
+            - name: DOCUMENT_SERVICE_URL
+              value: "http://document-service:{{ .Values.documentService.port }}"
           resources:
             {{- toYaml .Values.frontend.resources | nindent 12 }}
           readinessProbe:
