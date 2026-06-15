@@ -42,6 +42,12 @@ export const config = {
   // Max messages per SQS receive call
   sqsMaxMessages: parseInt(process.env.SQS_MAX_MESSAGES || '5', 10),
 
-  // Whether to skip real Bedrock calls (use mock agent runner)
+  // Whether to skip real Bedrock calls (use mock agent runner).
+  // Automatically true if AWS_DEFAULT_REGION is not set.
   mockAgent: process.env.MOCK_AGENT === 'true' || !process.env.AWS_DEFAULT_REGION,
+
+  // Shared secret for service-to-service /api/compliance/trigger calls.
+  // When blank (local dev), the check is skipped.
+  // In production set INTERNAL_API_SECRET in both core-service and ai-service.
+  internalApiSecret: process.env.INTERNAL_API_SECRET || '',
 };

@@ -37,3 +37,18 @@ output "event_bus_arn" {
   description = "ARN of the CargoTrack custom EventBridge event bus"
   value       = aws_cloudwatch_event_bus.main.arn
 }
+
+output "compliance_queue_url" {
+  description = "URL of the compliance trigger SQS queue (for ai-service SQS_COMPLIANCE_QUEUE_URL)"
+  value       = aws_sqs_queue.compliance.id
+}
+
+output "compliance_queue_arn" {
+  description = "ARN of the compliance trigger SQS queue"
+  value       = aws_sqs_queue.compliance.arn
+}
+
+output "compliance_dlq_url" {
+  description = "URL of the compliance trigger dead-letter queue"
+  value       = aws_sqs_queue.compliance_dlq.id
+}

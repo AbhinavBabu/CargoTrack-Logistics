@@ -5,6 +5,7 @@ import { authenticate, requireAdmin } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { notificationProvider } from '../providers/notification';
 import { eventPublisher } from '../providers/event';
+import { config } from '../config';
 
 const prisma = new PrismaClient();
 const router = Router();
@@ -204,9 +205,9 @@ router.put('/shipments/:id/status', authenticate, requireAdmin, validate(updateS
       );
     }
 
-    // FIXED: this now actually publishes to AWS EventBridge (not just console.log).
-    // When status is IN_TRANSIT, EventBridge will route this to the compliance-check
-    // SQS queue (Terraform rule configured in Phase 3).
+    // Publish status_updated event to EventBridge.
+    // The Terraform EventBridge rule routes this to the compliance SQS queue
+    // when status is IN_TRANSIT or DELIVERED.
     await eventPublisher.publish('shipment.status_updated', {
       shipmentId: shipment.id,
       trackingNumber: shipment.trackingNumber,
@@ -214,12 +215,73 @@ router.put('/shipments/:id/status', authenticate, requireAdmin, validate(updateS
       newStatus: status,
     });
 
+    // Auto-trigger compliance check for statuses that indicate
+    // documents should have been uploaded by now.
+    // Non-blocking: fire-and-forget. Status update response is returned first.
+    const COMPLIANCE_TRIGGER_STATUSES: ShipmentStatus[] = [
+      ShipmentStatus.IN_TRANSIT,
+      ShipmentStatus.DELIVERED,
+    ];
+    if (COMPLIANCE_TRIGGER_STATUSES.includes(status as ShipmentStatus)) {
+      triggerComplianceCheck(shipment.id, shipment.trackingNumber, status).catch((err) =>
+        console.error(`[admin] Failed to trigger compliance for ${shipment.id}:`, err)
+      );
+    }
+
     res.json(updated);
   } catch (error) {
     console.error('Admin update status error:', error);
     res.status(500).json({ error: 'Failed to update status' });
   }
 });
+
+// ─── Internal: Compliance Trigger ────────────────────────────────────────────
+// Non-blocking helper — fires and forgets the compliance agent invocation.
+// Two modes:
+//   LOCAL (no SQS_COMPLIANCE_QUEUE_URL): calls ai-service HTTP trigger directly
+//   LIVE  (SQS_COMPLIANCE_QUEUE_URL set): publishes message to SQS queue
+
+async function triggerComplianceCheck(
+  shipmentId: string,
+  trackingNumber: string,
+  newStatus: string
+): Promise<void> {
+  const payload = {
+    shipmentId,
+    trackingNumber,
+    newStatus,
+    triggeredAt: new Date().toISOString(),
+  };
+
+  if (config.sqsComplianceQueueUrl) {
+    // Live AWS mode: publish directly to SQS compliance queue
+    // (ai-service SQS consumer will pick this up)
+    const { SQSClient, SendMessageCommand } = await import('@aws-sdk/client-sqs');
+    const sqs = new SQSClient({ region: process.env.AWS_DEFAULT_REGION || 'us-east-1' });
+    await sqs.send(new SendMessageCommand({
+      QueueUrl: config.sqsComplianceQueueUrl,
+      MessageBody: JSON.stringify(payload),
+    }));
+    console.log(`[admin] Compliance trigger published to SQS — shipment: ${shipmentId}`);
+  } else {
+    // Local Docker mode: call ai-service HTTP trigger directly
+    const url = `${config.aiServiceUrl}/api/compliance/trigger`;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (config.internalApiSecret) {
+      headers['x-internal-secret'] = config.internalApiSecret;
+    }
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`ai-service trigger failed (${response.status}): ${text}`);
+    }
+    console.log(`[admin] Compliance trigger sent to ai-service — shipment: ${shipmentId}`);
+  }
+}
 
 // ─── GET /api/admin/documents ─────────────────────────────────────────────────
 // NEW: Platform-wide document listing for admin.
@@ -357,6 +419,57 @@ router.get('/compliance/:shipmentId', authenticate, requireAdmin, async (req: Re
   } catch (error) {
     console.error('Admin compliance report error:', error);
     res.status(500).json({ error: 'Failed to fetch compliance report' });
+  }
+});
+
+// ─── POST /api/admin/compliance/trigger/:shipmentId ──────────────────────────
+// Manual compliance trigger for the admin UI.
+// Allows re-running the compliance agent for any shipment on demand.
+/**
+ * @swagger
+ * /api/admin/compliance/trigger/{shipmentId}:
+ *   post:
+ *     summary: Manually trigger compliance check for a shipment (admin)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: shipmentId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       202:
+ *         description: Compliance check started
+ */
+router.post('/compliance/trigger/:shipmentId', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const shipment = await prisma.shipment.findUnique({
+      where: { id: req.params.shipmentId },
+      select: { id: true, trackingNumber: true, status: true },
+    });
+
+    if (!shipment) {
+      res.status(404).json({ error: 'Shipment not found' });
+      return;
+    }
+
+    // Non-blocking — respond immediately, run agent in background
+    res.status(202).json({
+      message: 'Compliance check triggered',
+      shipmentId: shipment.id,
+    });
+
+    triggerComplianceCheck(
+      shipment.id,
+      shipment.trackingNumber,
+      shipment.status
+    ).catch((err) =>
+      console.error(`[admin] Manual compliance trigger failed for ${shipment.id}:`, err)
+    );
+  } catch (error) {
+    console.error('Admin compliance trigger error:', error);
+    res.status(500).json({ error: 'Failed to trigger compliance check' });
   }
 });
 

@@ -9,6 +9,7 @@ import {
   AuditEventInput,
 } from './contracts';
 import { dynamoAuditService } from '../services/dynamodb';
+import { textractService } from '../services/textract';
 
 const prisma = new PrismaClient();
 
@@ -113,78 +114,18 @@ export class ComplianceAgentTools implements AgentDataAccess {
   /**
    * Tool: extract_document_fields
    *
-   * Phase 2 implementation: returns mock extracted fields.
-   * This is designed so the agent can exercise the full compliance
-   * check loop locally without AWS credentials.
+   * Delegates to TextractService which handles three modes:
+   *   LIVE (PDF)   — Textract StartDocumentAnalysis (async, polled)
+   *   LIVE (image) — Textract AnalyzeDocument (synchronous)
+   *   MOCK         — Returns realistic synthetic fields (no AWS needed)
    *
-   * Phase 3: replace the mock block with a real Textract call:
-   *   const textract = new TextractClient({ region });
-   *   const response = await textract.send(new AnalyzeDocumentCommand({...}));
-   *   // parse response.Blocks into key-value fields
+   * The service automatically selects mode based on:
+   *   - MOCK_AGENT env var
+   *   - AWS_DEFAULT_REGION being set
+   *   - S3_BUCKET being set (local storage mode uses mock)
    */
   async extractDocumentFields(doc: DocumentRecord): Promise<ExtractedDocumentFields> {
-    // ── Phase 3: Textract integration point ──
-    // TODO: Replace this mock with:
-    //   import { TextractClient, AnalyzeDocumentCommand } from '@aws-sdk/client-textract';
-    //   const s3Object = { Bucket: config.s3Bucket, Name: doc.fileName };
-    //   const result = await textract.send(new AnalyzeDocumentCommand({
-    //     Document: { S3Object: s3Object },
-    //     FeatureTypes: ['FORMS'],
-    //   }));
-    //   return parseTextractBlocks(result.Blocks ?? []);
-
-    // Mock: simulate realistic extracted fields for the document type
-    const mockFields: Record<DocumentType, Record<string, string>> = {
-      INVOICE: {
-        invoice_number: `INV-${Date.now()}`,
-        sender: 'Mock Sender Corp',
-        amount: '1500.00',
-        currency: 'USD',
-        date: new Date().toISOString().split('T')[0],
-      },
-      CUSTOMS: {
-        hs_code: '8471.30',
-        declared_value: '1500.00',
-        origin_country: 'US',
-        destination_country: 'DE',
-        description: 'Electronic equipment',
-      },
-      BILL_OF_LADING: {
-        bol_number: `BOL-${Date.now()}`,
-        carrier: 'Mock Shipping Lines',
-        vessel: 'MV CargoTrack',
-        port_of_loading: 'New York',
-        port_of_discharge: 'Hamburg',
-      },
-      SHIPPING_LABEL: {
-        tracking_number: `TRK-${Date.now()}`,
-        service_type: 'EXPRESS',
-        weight: '5.2',
-        dimensions: '30x20x15',
-      },
-      SHIPPING_MANIFEST: {
-        manifest_number: `MAN-${Date.now()}`,
-        total_packages: '1',
-        total_weight: '5.2',
-        special_handling: 'FRAGILE',
-      },
-      PROOF_OF_DELIVERY: {
-        delivered_to: 'Mock Receiver',
-        delivery_date: new Date().toISOString(),
-        signature_obtained: 'true',
-      },
-      OTHER: {
-        document_type: 'UNKNOWN',
-        content: 'Unrecognized document type',
-      },
-    };
-
-    return {
-      documentId: doc.id,
-      documentType: doc.documentType,
-      fields: mockFields[doc.documentType] ?? mockFields.OTHER,
-      confidence: 0.92,
-    };
+    return textractService.extractFields(doc);
   }
 
   /** Tool: create_compliance_finding */

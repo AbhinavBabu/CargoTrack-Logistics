@@ -65,6 +65,10 @@ services:
       AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-}
       EVENT_BUS_NAME: ${EVENT_BUS_NAME:-}
       S3_BUCKET: ${S3_BUCKET:-}
+      # Service-to-service wiring for compliance trigger
+      AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai-service:4002}
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:-}
+      SQS_COMPLIANCE_QUEUE_URL: ${SQS_COMPLIANCE_QUEUE_URL:-}
     ports:
       - "${CORE_PORT:-4000}:4000"
     volumes:
@@ -143,6 +147,7 @@ services:
       BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-amazon.nova-pro-v1:0}
       S3_BUCKET: ${S3_BUCKET:-}
       DYNAMO_AUDIT_TABLE: ${DYNAMO_AUDIT_TABLE:-cargotrack-audit}
+      INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:-}
       # Set MOCK_AGENT=false when real AWS credentials are provided
       MOCK_AGENT: ${MOCK_AGENT:-true}
     ports:

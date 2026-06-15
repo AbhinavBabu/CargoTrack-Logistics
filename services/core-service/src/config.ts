@@ -24,4 +24,14 @@ export const config = {
   adminPassword: process.env.ADMIN_PASSWORD || 'admin123',
   eventBusName: process.env.EVENT_BUS_NAME,
   serviceName: 'core-service',
+
+  // AI service base URL for internal compliance triggers (Docker Compose: http://ai-service:4002)
+  aiServiceUrl: process.env.AI_SERVICE_URL || 'http://localhost:4002',
+
+  // Shared secret for service-to-service calls to ai-service
+  internalApiSecret: process.env.INTERNAL_API_SECRET || '',
+
+  // SQS compliance queue URL — when set, admin trigger publishes to SQS
+  // instead of calling ai-service directly (live AWS mode)
+  sqsComplianceQueueUrl: process.env.SQS_COMPLIANCE_QUEUE_URL || '',
 };

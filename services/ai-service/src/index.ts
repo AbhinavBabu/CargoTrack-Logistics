@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { config } from './config';
 import healthRoutes from './routes/health';
+import triggerRoutes from './routes/trigger';
 import { complianceHandler } from './handlers/complianceHandler';
 
 const app = express();
@@ -10,6 +11,11 @@ app.use(express.json());
 
 // Health check — used by Docker healthcheck and future EKS liveness probe
 app.use('/api/health', healthRoutes);
+
+// Compliance trigger — internal service-to-service endpoint
+// Allows core-service admin panel to start a compliance check directly
+// without needing SQS/EventBridge in local dev.
+app.use('/api/compliance', triggerRoutes);
 
 // Start the SQS compliance polling loop (non-blocking)
 // In mock mode, this is a no-op.
