@@ -1,0 +1,124 @@
+# CargoTrack v3 Helm Chart — Default Values
+# Override in values-dev.yaml or values-prod.yaml
+
+# Global settings
+global:
+  environment: dev
+  region: us-east-1
+  namespace: cargotrack
+
+# Docker Hub registry (no ECR for now)
+image:
+  registry: abhinavbabu33
+  pullPolicy: Always
+
+# ── Core Service ─────────────────────────────────────────────────────────────
+coreService:
+  image: cargotrack-core
+  tag: latest
+  replicas: 2
+  port: 4000
+  nodePort: ""
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  serviceAccount:
+    name: core-service
+    roleArn: ""       # Injected in values-dev.yaml from terraform output
+  env:
+    NODE_ENV: production
+    PORT: "4000"
+    MOCK_AGENT: "true"
+  ingress:
+    enabled: true
+    pathPrefix: "/api"
+    # document paths handled by document-service
+    excludePaths:
+      - "/api/documents"
+
+# ── Document Service ──────────────────────────────────────────────────────────
+documentService:
+  image: cargotrack-docs
+  tag: latest
+  replicas: 2
+  port: 4001
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  serviceAccount:
+    name: document-service
+    roleArn: ""       # Injected in values-dev.yaml
+  env:
+    NODE_ENV: production
+    PORT: "4001"
+
+# ── AI Service ────────────────────────────────────────────────────────────────
+aiService:
+  image: cargotrack-ai
+  tag: latest
+  replicas: 1          # 1 replica — singleton SQS consumer
+  port: 4002
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+  serviceAccount:
+    name: ai-service
+    roleArn: ""       # Injected in values-dev.yaml
+  env:
+    NODE_ENV: production
+    PORT: "4002"
+    MOCK_AGENT: "true"   # Override to "false" when Bedrock access available
+
+# ── Frontend ──────────────────────────────────────────────────────────────────
+frontend:
+  image: cargotrack-frontend
+  tag: latest
+  replicas: 2
+  port: 80
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+  env:
+    VITE_API_URL: ""    # Empty = same origin (proxied through Ingress)
+
+# ── Ingress (AWS Load Balancer Controller) ────────────────────────────────────
+ingress:
+  enabled: true
+  className: alb
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    alb.ingress.kubernetes.io/group.name: cargotrack
+  # ALB DNS will appear in: kubectl get ingress -n cargotrack
+
+# ── AWS resource connections ──────────────────────────────────────────────────
+# These are injected from terraform output into values-dev.yaml
+aws:
+  region: us-east-1
+  rdsEndpoint: ""
+  rdsDatabase: cargotrack
+  rdsUsername: cargotrack
+  s3BucketName: ""
+  eventBusName: ""
+  complianceQueueUrl: ""
+  auditTableName: ""
+  dbSecretArn: ""
+  appSecretArn: ""

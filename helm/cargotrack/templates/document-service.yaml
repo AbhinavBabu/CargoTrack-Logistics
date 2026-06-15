@@ -1,0 +1,93 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ .Values.documentService.serviceAccount.name }}
+  namespace: {{ .Values.global.namespace }}
+  annotations:
+    eks.amazonaws.com/role-arn: {{ .Values.documentService.serviceAccount.roleArn | quote }}
+  labels:
+    app: document-service
+    {{- include "cargotrack.labels" . | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: document-service
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: document-service
+    {{- include "cargotrack.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.documentService.replicas }}
+  selector:
+    matchLabels:
+      app: document-service
+  template:
+    metadata:
+      labels:
+        app: document-service
+    spec:
+      serviceAccountName: {{ .Values.documentService.serviceAccount.name }}
+      containers:
+        - name: document-service
+          image: {{ .Values.image.registry }}/{{ .Values.documentService.image }}:{{ .Values.documentService.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.documentService.port }}
+          env:
+            - name: NODE_ENV
+              value: {{ .Values.documentService.env.NODE_ENV | quote }}
+            - name: PORT
+              value: {{ .Values.documentService.port | quote }}
+            - name: AWS_REGION
+              value: {{ .Values.global.region | quote }}
+            - name: AWS_DEFAULT_REGION
+              value: {{ .Values.global.region | quote }}
+            - name: DB_HOST
+              value: {{ .Values.aws.rdsEndpoint | quote }}
+            - name: DB_NAME
+              value: {{ .Values.aws.rdsDatabase | quote }}
+            - name: DB_USER
+              value: {{ .Values.aws.rdsUsername | quote }}
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_SSL
+              value: "true"
+            - name: S3_BUCKET_NAME
+              value: {{ .Values.aws.s3BucketName | quote }}
+            - name: DB_SECRET_ARN
+              value: {{ .Values.aws.dbSecretArn | quote }}
+          resources:
+            {{- toYaml .Values.documentService.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /api/documents/health
+              port: {{ .Values.documentService.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/documents/health
+              port: {{ .Values.documentService.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: document-service
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: document-service
+spec:
+  type: ClusterIP
+  selector:
+    app: document-service
+  ports:
+    - name: http
+      port: {{ .Values.documentService.port }}
+      targetPort: {{ .Values.documentService.port }}
+      protocol: TCP

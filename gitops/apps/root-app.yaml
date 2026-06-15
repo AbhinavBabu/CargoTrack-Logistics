@@ -1,0 +1,26 @@
+# ArgoCD App-of-Apps root Application
+# This single Application manages all other Applications in the gitops/apps/ directory.
+# Apply once with: kubectl apply -f gitops/apps/root-app.yaml
+# After that, everything is managed by ArgoCD automatically.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-app
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/abhinavbabu33/cargotrack  # UPDATE: your actual repo URL
+    targetRevision: cargotrack-v3-microservices
+    path: gitops/apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

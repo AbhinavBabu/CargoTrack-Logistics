@@ -1,0 +1,15 @@
+apiVersion: v2
+name: cargotrack
+description: CargoTrack v3 - Microservices on EKS with AI Compliance
+type: application
+version: 3.0.0
+appVersion: "3.0.0"
+keywords:
+  - cargotrack
+  - microservices
+  - eks
+  - compliance
+  - ai
+maintainers:
+  - name: CargoTrack Team
+home: https://github.com/your-org/cargotrack

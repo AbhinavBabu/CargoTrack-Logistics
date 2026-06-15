@@ -1,0 +1,114 @@
+# CargoTrack Production Helm Overrides
+# Apply with: helm upgrade cargotrack ./helm/cargotrack -f values.yaml -f values-prod.yaml
+# Or via ArgoCD by adding this file to the Application spec valueFiles list.
+#
+# Production hardening:
+#   - Higher replica counts
+#   - Resource limits increased
+#   - MOCK_AGENT=false (real Bedrock + Textract)
+#   - TEXTRACT_ENABLED=true
+#   - HPA enabled (requires metrics-server)
+
+global:
+  environment: prod
+  region: us-east-1
+  namespace: cargotrack-prod
+
+image:
+  pullPolicy: IfNotPresent  # Use cached image in prod for faster restarts
+
+# ── Core Service ──────────────────────────────────────────────────────────────
+coreService:
+  tag: latest  # CI/CD replaces this with commit SHA
+  replicas: 3
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+  serviceAccount:
+    roleArn: ""  # INJECT: terraform output irsa_core_service_role_arn
+  env:
+    NODE_ENV: production
+    PORT: "4000"
+    MOCK_AGENT: "false"
+    TEXTRACT_ENABLED: "true"
+
+# ── Document Service ──────────────────────────────────────────────────────────
+documentService:
+  tag: latest
+  replicas: 3
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+  serviceAccount:
+    roleArn: ""  # INJECT: terraform output irsa_document_service_role_arn
+  env:
+    NODE_ENV: production
+    PORT: "4001"
+
+# ── AI Service ────────────────────────────────────────────────────────────────
+# Single replica — SQS consumer must be a singleton to avoid duplicate processing
+aiService:
+  tag: latest
+  replicas: 1
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "2000m"   # Bedrock + Textract calls are CPU-intensive
+      memory: "2Gi"
+  serviceAccount:
+    roleArn: ""  # INJECT: terraform output irsa_ai_service_role_arn
+  env:
+    NODE_ENV: production
+    PORT: "4002"
+    MOCK_AGENT: "false"           # Use real Bedrock Nova
+    TEXTRACT_ENABLED: "true"      # Use real AWS Textract
+    BEDROCK_MODEL_ID: "amazon.nova-pro-v1:0"
+
+# ── Frontend ──────────────────────────────────────────────────────────────────
+frontend:
+  tag: latest
+  replicas: 3
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+# ── Ingress (Production ALB) ──────────────────────────────────────────────────
+ingress:
+  enabled: true
+  className: alb
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/group.name: cargotrack-prod
+    alb.ingress.kubernetes.io/certificate-arn: ""  # INJECT: ACM cert ARN
+
+# ── AWS Resources ─────────────────────────────────────────────────────────────
+# Populated by inject-values script after terraform apply
+aws:
+  region: us-east-1
+  rdsEndpoint: ""
+  rdsDatabase: cargotrack
+  rdsUsername: cargotrack
+  s3BucketName: ""
+  eventBusName: ""
+  complianceQueueUrl: ""
+  auditTableName: ""
+  dbSecretArn: ""
+  appSecretArn: ""

@@ -1,0 +1,54 @@
+# CargoTrack Dev Environment Overrides
+# IMPORTANT: After terraform apply, run the inject-values script to populate
+# the roleArn and aws.* fields from terraform output.
+#
+# Quick inject command (run from cargotrack-infra/environments/dev/):
+#   terraform output -json | jq -r '...' > ../../../../helm/cargotrack/values-dev.yaml
+# See docs/post-apply-setup.md for the full command.
+
+global:
+  environment: dev
+  region: us-east-1
+  namespace: cargotrack
+
+image:
+  pullPolicy: Always
+
+# AI mode: keep mock=true until Bedrock access is confirmed
+# To switch to Nova: change to "false" and run: git push (ArgoCD deploys automatically)
+aiService:
+  env:
+    MOCK_AGENT: "true"
+
+# IRSA role ARNs — populated by inject-values script after terraform apply
+# DO NOT commit real ARNs — these are injected by CI/CD from terraform output
+coreService:
+  tag: latest
+  serviceAccount:
+    roleArn: ""  # INJECT: terraform output irsa_core_service_role_arn
+
+documentService:
+  tag: latest
+  serviceAccount:
+    roleArn: ""  # INJECT: terraform output irsa_document_service_role_arn
+
+aiService:
+  tag: latest
+  serviceAccount:
+    roleArn: ""  # INJECT: terraform output irsa_ai_service_role_arn
+
+frontend:
+  tag: latest
+
+# AWS resource connections — populated by inject-values script
+aws:
+  region: us-east-1
+  rdsEndpoint: ""      # INJECT: terraform output rds_endpoint
+  rdsDatabase: cargotrack
+  rdsUsername: cargotrack
+  s3BucketName: ""     # INJECT: terraform output s3_bucket_name
+  eventBusName: ""     # INJECT: terraform output event_bus_name
+  complianceQueueUrl: "" # INJECT: terraform output compliance_queue_url
+  auditTableName: ""   # INJECT: terraform output dynamodb_audit_table
+  dbSecretArn: ""      # INJECT: from terraform output (sensitive)
+  appSecretArn: ""     # INJECT: from terraform output (sensitive)

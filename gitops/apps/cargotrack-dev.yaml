@@ -1,0 +1,37 @@
+# CargoTrack Dev Application
+# ArgoCD watches helm/cargotrack/ and deploys to the EKS cluster.
+# On any push that updates helm/cargotrack/values-dev.yaml (e.g. image tag changes),
+# ArgoCD detects drift and performs a rolling deploy automatically.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cargotrack-dev
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/abhinavbabu33/cargotrack  # UPDATE: your actual repo URL
+    targetRevision: cargotrack-v3-microservices
+    path: helm/cargotrack
+    helm:
+      valueFiles:
+        - values.yaml
+        - values-dev.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cargotrack
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 5s
+        maxDuration: 3m
+        factor: 2

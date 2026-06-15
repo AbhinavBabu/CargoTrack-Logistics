@@ -1,0 +1,45 @@
+{{- if .Values.ingress.enabled }}
+---
+# Single Ingress with path-based routing to all 3 backend services and frontend
+# AWS Load Balancer Controller reads the alb.ingress.kubernetes.io/* annotations
+# and provisions an internet-facing ALB automatically.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cargotrack
+  namespace: {{ .Values.global.namespace }}
+  annotations:
+    {{- toYaml .Values.ingress.annotations | nindent 4 }}
+  labels:
+    app: cargotrack
+    {{- include "cargotrack.labels" . | nindent 4 }}
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+          # Document service — must come before /api/* to avoid swallowing
+          - path: /api/documents
+            pathType: Prefix
+            backend:
+              service:
+                name: document-service
+                port:
+                  number: {{ .Values.documentService.port }}
+          # Core service — all other /api/* routes
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: core-service
+                port:
+                  number: {{ .Values.coreService.port }}
+          # Frontend — catch-all
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: {{ .Values.frontend.port }}
+{{- end }}
