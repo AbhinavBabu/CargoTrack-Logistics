@@ -1,5 +1,4 @@
-import { PrismaClient, DocumentType, ComplianceSeverity, FindingType } from '@prisma/client';
-import { randomUUID } from 'crypto';
+import { PrismaClient, Prisma, DocumentType, ComplianceSeverity, FindingType } from '@prisma/client';
 import {
   AgentDataAccess,
   ShipmentRecord,
@@ -197,7 +196,11 @@ export class ComplianceAgentTools implements AgentDataAccess {
         findingType: input.findingType as FindingType,
         severity: input.severity as ComplianceSeverity,
         description: input.description,
-        detail: input.detail ?? undefined,
+        // Prisma's Json field requires Prisma.InputJsonValue — plain objects
+        // must be cast explicitly. null is handled via Prisma.DbNull.
+        detail: input.detail
+          ? (input.detail as unknown as Prisma.InputJsonValue)
+          : Prisma.DbNull,
       },
     });
 

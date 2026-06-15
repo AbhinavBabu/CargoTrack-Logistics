@@ -2,7 +2,6 @@ import {
   BedrockRuntimeClient,
   ConverseCommand,
   type Message,
-  type Tool,
   type ContentBlock,
 } from '@aws-sdk/client-bedrock-runtime';
 import { randomUUID } from 'crypto';
@@ -153,7 +152,6 @@ async function runMockAgent(
   }
 
   // Step 6: Finalize
-  const hasCritical = false; // mock — no critical
   const hasHigh = findings.some((f) => f.includes('MISSING') || f.includes('MISMATCH'));
   const status = hasHigh ? 'FAILED' : findings.length > 0 ? 'PARTIAL' : 'PASSED';
 
@@ -185,12 +183,19 @@ async function runBedrockAgent(
 
   const client = new BedrockRuntimeClient({ region: config.region });
 
-  // Convert our tool specs to the Bedrock Converse format
-  const bedrockTools: Tool[] = COMPLIANCE_AGENT_TOOLS.map((t) => ({
+  // Convert our tool specs to the Bedrock Converse format.
+  // We do NOT annotate as Tool[] because the SDK's internal __DocumentType
+  // phantom-type on inputSchema.json rejects plain objects at compile time.
+  // Casting to the parameter type at the call site (toolConfig.tools) is
+  // sufficient — the runtime shape is correct.
+  const bedrockTools = COMPLIANCE_AGENT_TOOLS.map((t) => ({
     toolSpec: {
       name: t.name,
       description: t.description,
-      inputSchema: { json: t.inputSchema.json },
+      // The SDK requires inputSchema.json to be a plain JSON Schema object.
+      // Using 'as unknown as Record<string,unknown>' avoids the __DocumentType
+      // phantom-type conflict while preserving the correct runtime value.
+      inputSchema: { json: t.inputSchema.json as unknown as Record<string, unknown> },
     },
   }));
 
@@ -216,7 +221,8 @@ async function runBedrockAgent(
       modelId: config.bedrockModelId,
       system: [{ text: SYSTEM_PROMPT }],
       messages,
-      toolConfig: { tools: bedrockTools },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      toolConfig: { tools: bedrockTools as any },
       inferenceConfig: {
         maxTokens: 4096,
         temperature: 0,   // deterministic compliance checks
@@ -252,21 +258,33 @@ async function runBedrockAgent(
         const { toolUseId, name, input } = block.toolUse;
         console.log(`[agent][BEDROCK] Tool call: ${name}`, input);
 
-        let result: unknown;
+        let resultRaw: unknown;
 
         try {
-          result = await dispatchToolCall(name ?? '', input as Record<string, unknown>, tools, agentRunId);
+          resultRaw = await dispatchToolCall(name ?? '', input as Record<string, unknown>, tools, agentRunId);
         } catch (err) {
-          result = { error: String(err) };
+          resultRaw = { error: String(err) };
           console.error(`[agent][BEDROCK] Tool error (${name}):`, err);
         }
+
+        // toolResult.content[].json requires Record<string, unknown>.
+        // Array results (e.g. DocumentType[] from determine_required_documents)
+        // are wrapped in { result: [...] } to satisfy the type constraint.
+        const resultObj: Record<string, unknown> =
+          resultRaw === null || resultRaw === undefined
+            ? { result: null }
+            : Array.isArray(resultRaw)
+            ? { result: resultRaw }
+            : typeof resultRaw === 'object'
+            ? (resultRaw as Record<string, unknown>)
+            : { result: resultRaw };
 
         toolResults.push({
           toolResult: {
             toolUseId,
-            content: [{ json: result as Record<string, unknown> }],
+            content: [{ json: resultObj }],
           },
-        });
+        } as ContentBlock);
       }
     }
 
@@ -307,14 +325,12 @@ async function dispatchToolCall(
       );
 
     case 'extract_document_fields': {
-      const docs = await tools.getDocuments(''); // already have the doc from context
-      // The agent passes document_id; we need the full record to extract
-      // In practice, the agent already retrieved docs via get_uploaded_documents
-      // and is now requesting extraction for a specific one.
-      // We do a targeted Prisma lookup here to keep the contract clean.
+      // The agent passes document_id; we look it up directly to get the full record.
       const { PrismaClient: PC } = await import('@prisma/client');
       const p = new PC();
-      const doc = await p.shipmentDocument.findUnique({ where: { id: input.document_id as string } });
+      const doc = await p.shipmentDocument.findUnique({
+        where: { id: input.document_id as string },
+      });
       await p.$disconnect();
       if (!doc) return { error: 'Document not found' };
       return tools.extractDocumentFields({
