@@ -73,7 +73,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/api/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4000/api/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -113,7 +113,7 @@ services:
       core-service:
         condition: service_healthy   # wait for migrations to complete
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:4001/api/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4001/api/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -153,7 +153,7 @@ services:
       core-service:
         condition: service_healthy   # wait for migrations
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:4002/api/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4002/api/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
