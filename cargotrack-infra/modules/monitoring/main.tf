@@ -4,7 +4,9 @@ locals {
     ManagedBy = "Terraform"
   }
 
-  alarms = {
+  # EC2/ASG-specific alarms — only created when backend_asg_name is provided.
+  # When running on EKS, these are omitted (var defaults to "").
+  asg_alarms = var.backend_asg_name != "" ? {
     backend_cpu_high = {
       alarm_name          = "${var.project_name}-backend-cpu-high"
       alarm_description   = "Backend ASG CPU utilization exceeded 80%"
@@ -19,22 +21,10 @@ locals {
         AutoScalingGroupName = var.backend_asg_name
       }
     }
+  } : {}
 
-    rds_cpu_high = {
-      alarm_name          = "${var.project_name}-rds-cpu-high"
-      alarm_description   = "RDS CPU utilization exceeded 80%"
-      metric_name         = "CPUUtilization"
-      namespace           = "AWS/RDS"
-      statistic           = "Average"
-      period              = 300
-      evaluation_periods  = 2
-      threshold           = 80
-      comparison_operator = "GreaterThanThreshold"
-      dimensions = {
-        DBInstanceIdentifier = var.db_identifier
-      }
-    }
-
+  # ALB-specific alarms — only created when external_alb_arn_suffix is provided.
+  alb_alarms = var.external_alb_arn_suffix != "" ? {
     alb_5xx_errors = {
       alarm_name          = "${var.project_name}-alb-5xx-errors"
       alarm_description   = "External ALB 5XX error count exceeded threshold"
@@ -64,7 +54,116 @@ locals {
         LoadBalancer = var.external_alb_arn_suffix
       }
     }
+  } : {}
+
+  # RDS alarm — always active regardless of compute model
+  rds_alarms = {
+    rds_cpu_high = {
+      alarm_name          = "${var.project_name}-rds-cpu-high"
+      alarm_description   = "RDS CPU utilization exceeded 80%"
+      metric_name         = "CPUUtilization"
+      namespace           = "AWS/RDS"
+      statistic           = "Average"
+      period              = 300
+      evaluation_periods  = 2
+      threshold           = 80
+      comparison_operator = "GreaterThanThreshold"
+      dimensions = {
+        DBInstanceIdentifier = var.db_identifier
+      }
+    }
   }
+
+  # Merge all alarm maps — only non-empty maps contribute entries
+  alarms = merge(local.asg_alarms, local.alb_alarms, local.rds_alarms)
+
+  # Dashboard widgets — built conditionally to avoid empty-string metric dimensions
+  # CloudWatch rejects widgets whose dimension values are empty strings.
+  asg_widgets = var.backend_asg_name != "" ? [
+    {
+      type   = "metric"
+      x      = 0
+      y      = 0
+      width  = 12
+      height = 6
+      properties = {
+        title  = "Backend ASG CPU Utilization"
+        region = var.aws_region
+        metrics = [["AWS/EC2", "CPUUtilization", "AutoScalingGroupName", var.backend_asg_name]]
+        period = 300
+        stat   = "Average"
+        view   = "timeSeries"
+      }
+    }
+  ] : []
+
+  alb_widgets = var.external_alb_arn_suffix != "" ? [
+    {
+      type   = "metric"
+      x      = 12
+      y      = 0
+      width  = 12
+      height = 6
+      properties = {
+        title  = "External ALB Request Count"
+        region = var.aws_region
+        metrics = [["AWS/ApplicationELB", "RequestCount", "LoadBalancer", var.external_alb_arn_suffix]]
+        period = 300
+        stat   = "Sum"
+        view   = "timeSeries"
+      }
+    },
+    {
+      type   = "metric"
+      x      = 0
+      y      = 6
+      width  = 12
+      height = 6
+      properties = {
+        title  = "External ALB Target Response Time"
+        region = var.aws_region
+        metrics = [["AWS/ApplicationELB", "TargetResponseTime", "LoadBalancer", var.external_alb_arn_suffix]]
+        period = 300
+        stat   = "Average"
+        view   = "timeSeries"
+      }
+    }
+  ] : []
+
+  rds_widgets = [
+    {
+      type   = "metric"
+      x      = 12
+      y      = 6
+      width  = 12
+      height = 6
+      properties = {
+        title  = "RDS CPU Utilization"
+        region = var.aws_region
+        metrics = [["AWS/RDS", "CPUUtilization", "DBInstanceIdentifier", var.db_identifier]]
+        period = 300
+        stat   = "Average"
+        view   = "timeSeries"
+      }
+    },
+    {
+      type   = "metric"
+      x      = 0
+      y      = 12
+      width  = 12
+      height = 6
+      properties = {
+        title  = "RDS Database Connections"
+        region = var.aws_region
+        metrics = [["AWS/RDS", "DatabaseConnections", "DBInstanceIdentifier", var.db_identifier]]
+        period = 300
+        stat   = "Average"
+        view   = "timeSeries"
+      }
+    }
+  ]
+
+  dashboard_widgets = concat(local.asg_widgets, local.alb_widgets, local.rds_widgets)
 }
 
 resource "aws_sns_topic" "alarms" {
@@ -111,92 +210,7 @@ resource "aws_cloudwatch_dashboard" "main" {
   dashboard_name = "${var.project_name}-overview"
 
   dashboard_body = jsonencode({
-    widgets = [
-      {
-        type   = "metric"
-        x      = 0
-        y      = 0
-        width  = 12
-        height = 6
-        properties = {
-          title  = "Backend ASG CPU Utilization"
-          region = var.aws_region
-          metrics = [
-            ["AWS/EC2", "CPUUtilization", "AutoScalingGroupName", var.backend_asg_name]
-          ]
-          period = 300
-          stat   = "Average"
-          view   = "timeSeries"
-        }
-      },
-      {
-        type   = "metric"
-        x      = 12
-        y      = 0
-        width  = 12
-        height = 6
-        properties = {
-          title  = "External ALB Request Count"
-          region = var.aws_region
-          metrics = [
-            ["AWS/ApplicationELB", "RequestCount", "LoadBalancer", var.external_alb_arn_suffix]
-          ]
-          period = 300
-          stat   = "Sum"
-          view   = "timeSeries"
-        }
-      },
-      {
-        type   = "metric"
-        x      = 0
-        y      = 6
-        width  = 12
-        height = 6
-        properties = {
-          title  = "External ALB Target Response Time"
-          region = var.aws_region
-          metrics = [
-            ["AWS/ApplicationELB", "TargetResponseTime", "LoadBalancer", var.external_alb_arn_suffix]
-          ]
-          period = 300
-          stat   = "Average"
-          view   = "timeSeries"
-        }
-      },
-      {
-        type   = "metric"
-        x      = 12
-        y      = 6
-        width  = 12
-        height = 6
-        properties = {
-          title  = "RDS CPU Utilization"
-          region = var.aws_region
-          metrics = [
-            ["AWS/RDS", "CPUUtilization", "DBInstanceIdentifier", var.db_identifier]
-          ]
-          period = 300
-          stat   = "Average"
-          view   = "timeSeries"
-        }
-      },
-      {
-        type   = "metric"
-        x      = 0
-        y      = 12
-        width  = 12
-        height = 6
-        properties = {
-          title  = "RDS Database Connections"
-          region = var.aws_region
-          metrics = [
-            ["AWS/RDS", "DatabaseConnections", "DBInstanceIdentifier", var.db_identifier]
-          ]
-          period = 300
-          stat   = "Average"
-          view   = "timeSeries"
-        }
-      }
-    ]
+    widgets = local.dashboard_widgets
   })
 }
+

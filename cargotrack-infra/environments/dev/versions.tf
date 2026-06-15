@@ -18,6 +18,12 @@ terraform {
       source  = "hashicorp/archive"
       version = "~> 2.0"
     }
+
+    # Required by modules/eks to compute the OIDC issuer TLS thumbprint
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~> 4.0"
+    }
   }
 }
 

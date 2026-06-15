@@ -46,6 +46,18 @@ export const config = {
   // Automatically true if AWS_DEFAULT_REGION is not set.
   mockAgent: process.env.MOCK_AGENT === 'true' || !process.env.AWS_DEFAULT_REGION,
 
+  // Whether to use AWS Textract for document extraction.
+  // Requires: AWS_DEFAULT_REGION + S3_BUCKET + valid IAM permissions.
+  // When false, falls back to PdfTextExtractor (pdf-parse) or OcrExtractor (tesseract).
+  textractEnabled: process.env.TEXTRACT_ENABLED !== 'false' &&
+    !!process.env.AWS_DEFAULT_REGION &&
+    !!process.env.S3_BUCKET &&
+    process.env.MOCK_AGENT !== 'true',
+
+  // Local upload directory — used by PdfTextExtractor and OcrExtractor
+  // when documents are stored on the local filesystem (not S3)
+  uploadDir: process.env.UPLOAD_DIR || '/uploads',
+
   // Shared secret for service-to-service /api/compliance/trigger calls.
   // When blank (local dev), the check is skipped.
   // In production set INTERNAL_API_SECRET in both core-service and ai-service.

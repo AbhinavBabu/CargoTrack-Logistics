@@ -9,13 +9,15 @@ variable "aws_region" {
 }
 
 variable "backend_asg_name" {
-  description = "Name of the backend Auto Scaling Group"
+  description = "Name of the backend Auto Scaling Group. Leave empty when using EKS (alarms are skipped)."
   type        = string
+  default     = ""
 }
 
 variable "external_alb_arn_suffix" {
-  description = "ARN suffix of the external ALB (used for CloudWatch metric dimensions)"
+  description = "ARN suffix of the external ALB. Leave empty when using EKS (alarms are skipped)."
   type        = string
+  default     = ""
 }
 
 variable "db_identifier" {

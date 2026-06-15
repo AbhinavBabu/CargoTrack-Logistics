@@ -1,17 +1,65 @@
 variable "aws_region" {
-  type = string
+  description = "AWS region to deploy into"
+  type        = string
+  default     = "us-east-1"
 }
 
 variable "project_name" {
-  type = string
+  description = "Project name \u2014 used as prefix for all resource names"
+  type        = string
+  default     = "cargotrack"
 }
 
 variable "vpc_cidr" {
-  type = string
+  description = "CIDR block for the VPC"
+  type        = string
+  default     = "10.0.0.0/16"
 }
 
 variable "alarm_email" {
+  description = "Email address for CloudWatch alarm SNS notifications"
   type        = string
-  description = "Email address for CloudWatch alarm SNS notifications. Leave null to skip email subscription."
   default     = null
+}
+
+# \u2500\u2500\u2500 EKS variables \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+variable "eks_cluster_version" {
+  description = "Kubernetes version for the EKS cluster"
+  type        = string
+  default     = "1.30"
+}
+
+variable "node_instance_types" {
+  description = "EC2 instance types for EKS worker nodes"
+  type        = list(string)
+  default     = ["t3.medium"]
+}
+
+variable "node_min_size" {
+  description = "Minimum number of EKS worker nodes"
+  type        = number
+  default     = 1
+}
+
+variable "node_max_size" {
+  description = "Maximum number of EKS worker nodes"
+  type        = number
+  default     = 4
+}
+
+variable "node_desired_size" {
+  description = "Desired number of EKS worker nodes"
+  type        = number
+  default     = 2
+}
+
+variable "eks_ingress_alb_dns" {
+  description = <<-EOT
+    DNS name of the ALB created by the AWS Load Balancer Controller after Helm deploy.
+    Leave empty on first apply (before ArgoCD has deployed the ingress).
+    Update with: terraform apply -var="eks_ingress_alb_dns=<alb-dns>" after first deploy.
+  EOT
+  type        = string
+  default     = ""
 }

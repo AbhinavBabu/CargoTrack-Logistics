@@ -9,7 +9,7 @@ import {
   AuditEventInput,
 } from './contracts';
 import { dynamoAuditService } from '../services/dynamodb';
-import { textractService } from '../services/textract';
+import { extractorFactory } from '../services/extractor/factory';
 
 const prisma = new PrismaClient();
 
@@ -114,18 +114,17 @@ export class ComplianceAgentTools implements AgentDataAccess {
   /**
    * Tool: extract_document_fields
    *
-   * Delegates to TextractService which handles three modes:
-   *   LIVE (PDF)   — Textract StartDocumentAnalysis (async, polled)
-   *   LIVE (image) — Textract AnalyzeDocument (synchronous)
-   *   MOCK         — Returns realistic synthetic fields (no AWS needed)
+   * Delegates to the DocumentExtractorFactory which selects the best
+   * available backend in priority order:
+   *   1. TextractExtractor  — AWS Textract (TEXTRACT_ENABLED=true + AWS + S3)
+   *   2. PdfTextExtractor   — pdf-parse offline (PDF files)
+   *   3. OcrExtractor       — tesseract.js offline (image files)
+   *   4. MockExtractor      — synthetic data (always available)
    *
-   * The service automatically selects mode based on:
-   *   - MOCK_AGENT env var
-   *   - AWS_DEFAULT_REGION being set
-   *   - S3_BUCKET being set (local storage mode uses mock)
+   * The compliance workflow works regardless of AWS availability.
    */
   async extractDocumentFields(doc: DocumentRecord): Promise<ExtractedDocumentFields> {
-    return textractService.extractFields(doc);
+    return extractorFactory.extract(doc);
   }
 
   /** Tool: create_compliance_finding */

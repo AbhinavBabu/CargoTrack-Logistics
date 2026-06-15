@@ -123,10 +123,6 @@ services:
       retries: 5
       start_period: 20s
 
-  # ── AI Service ────────────────────────────────────────────────────────────────
-  # Owns: Compliance agent, SQS consumer, DynamoDB audit writes
-  # Phase 2: runs in mock mode (no real Bedrock/SQS needed)
-  # Phase 3: set AWS_DEFAULT_REGION, BEDROCK_MODEL_ID, SQS_COMPLIANCE_QUEUE_URL
   ai-service:
     build:
       context: ./services/ai-service
@@ -150,8 +146,15 @@ services:
       INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:-}
       # Set MOCK_AGENT=false when real AWS credentials are provided
       MOCK_AGENT: ${MOCK_AGENT:-true}
+      # Extractor fallback chain: Textract → PDF → OCR → Mock
+      # Set TEXTRACT_ENABLED=true when AWS_DEFAULT_REGION + S3_BUCKET are configured
+      TEXTRACT_ENABLED: ${TEXTRACT_ENABLED:-false}
+      # Local upload dir — shared volume with document-service
+      UPLOAD_DIR: /uploads
     ports:
       - "${AI_PORT:-4002}:4002"
+    volumes:
+      - uploads:/uploads
     depends_on:
       postgres:
         condition: service_healthy
