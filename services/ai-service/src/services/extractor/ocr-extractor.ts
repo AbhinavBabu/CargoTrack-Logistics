@@ -4,19 +4,17 @@
  * Uses tesseract.js (pure JavaScript OCR engine) to extract text from images.
  * No AWS access required. Works with JPEG, PNG, TIFF, WEBP.
  *
- * Active when:
- *   - TEXTRACT_ENABLED=false OR no AWS access  AND
- *   - Document is an image  AND
- *   - Tesseract.js is installed
+ * v3.1 CHANGE: Returns ExtractedDocumentText (rawText) instead of
+ * ExtractedDocumentFields (key-value map). The raw OCR output goes
+ * directly to the LLM for analysis — no regex field extraction.
  *
  * Note: OCR accuracy depends heavily on image quality.
- * Confidence is calculated from tesseract's own confidence scores.
+ * Confidence is sourced from tesseract's own confidence scores.
  */
 
-import * as fs from 'fs';
 import * as path from 'path';
 import { DocumentExtractor } from './interface';
-import { DocumentRecord, ExtractedDocumentFields } from '../../agent/contracts';
+import { DocumentRecord, ExtractedDocumentText } from '../../agent/contracts';
 import { config } from '../../config';
 
 const SUPPORTED_IMAGE_TYPES = ['jpeg', 'jpg', 'png', 'tiff', 'tif', 'webp', 'bmp'];
@@ -40,35 +38,6 @@ async function createWorker(): Promise<TesseractWorker | null> {
   }
 }
 
-// Reuse regex patterns from PdfTextExtractor for consistency
-const FIELD_PATTERNS: Array<{ key: string; patterns: RegExp[] }> = [
-  { key: 'invoice_number', patterns: [/invoice\s*(?:no|number|#)[\s:]*([A-Z0-9\-\/]+)/i] },
-  { key: 'total_amount', patterns: [/total\s*(?:amount|due)?[\s:$]*([0-9,]+\.?[0-9]*)/i] },
-  { key: 'currency', patterns: [/\b(USD|EUR|GBP|JPY|CNY|INR|SGD|AUD|CAD)\b/i] },
-  { key: 'issue_date', patterns: [/(\d{1,2}[\-\/]\d{1,2}[\-\/]\d{2,4})/, /(\d{4}-\d{2}-\d{2})/] },
-  { key: 'sender_name', patterns: [/(?:from|shipper|sender)[\s:]*([A-Za-z][\w\s,\.]+?)(?:\n|$)/i] },
-  { key: 'receiver_name', patterns: [/(?:to|consignee|receiver)[\s:]*([A-Za-z][\w\s,\.]+?)(?:\n|$)/i] },
-  { key: 'tracking_number', patterns: [/(?:tracking|track)\s*(?:no|#)?[\s:]*([A-Z0-9\-]{6,})/i] },
-  { key: 'gross_weight', patterns: [/(?:gross\s*)?weight[\s:]*([0-9]+\.?[0-9]*)\s*(?:kg|lbs?)?/i] },
-  { key: 'carrier_name', patterns: [/carrier[\s:]*([A-Za-z][\w\s,\.]+?)(?:\n|$)/i] },
-  { key: 'delivery_date', patterns: [/(?:delivered|delivery)\s*(?:date|on)?[\s:]*(\d{1,2}[\-\/]\d{1,2}[\-\/]\d{2,4})/i] },
-];
-
-function extractFromOcrText(text: string): Record<string, string> {
-  const fields: Record<string, string> = {};
-  for (const { key, patterns } of FIELD_PATTERNS) {
-    for (const p of patterns) {
-      const m = text.match(p);
-      if (m?.[1]) { fields[key] = m[1].trim(); break; }
-    }
-  }
-  if (Object.keys(fields).length === 0) {
-    const preview = text.replace(/\s+/g, ' ').trim().slice(0, 500);
-    if (preview) fields['extracted_text'] = preview;
-  }
-  return fields;
-}
-
 export class OcrExtractor implements DocumentExtractor {
   readonly name = 'OcrExtractor';
 
@@ -80,13 +49,19 @@ export class OcrExtractor implements DocumentExtractor {
     return isImage && textractUnavailable;
   }
 
-  async extract(doc: DocumentRecord): Promise<ExtractedDocumentFields> {
+  async extract(doc: DocumentRecord): Promise<ExtractedDocumentText> {
     console.log(`[OcrExtractor] Processing image: ${doc.fileName}`);
 
     const worker = await createWorker();
     if (!worker) {
-      console.warn('[OcrExtractor] tesseract.js not available — returning empty fields');
-      return { documentId: doc.id, documentType: doc.documentType, fields: {}, confidence: 0 };
+      console.warn('[OcrExtractor] tesseract.js not available — returning empty text');
+      return {
+        documentId: doc.id,
+        documentType: doc.documentType,
+        rawText: '',
+        extractionMethod: 'tesseract',
+        confidence: 0,
+      };
     }
 
     try {
@@ -95,26 +70,37 @@ export class OcrExtractor implements DocumentExtractor {
       await worker.terminate();
 
       const { text, confidence: tesseractConfidence } = result.data;
-      const fields = extractFromOcrText(text);
+
+      // Clean up OCR text
+      const rawText = text
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
 
       // Tesseract confidence is 0-100; normalize to 0-1
       const confidence = Math.min(tesseractConfidence / 100, 1.0);
 
-      console.log(`[OcrExtractor] Extracted ${Object.keys(fields).length} fields, OCR confidence: ${confidence.toFixed(2)}`);
+      console.log(`[OcrExtractor] Extracted ${rawText.length} chars, OCR confidence: ${confidence.toFixed(2)}`);
 
       return {
         documentId: doc.id,
         documentType: doc.documentType,
-        fields,
+        rawText,
+        extractionMethod: 'tesseract',
         confidence,
       };
     } catch (err) {
       console.error(`[OcrExtractor] Failed for ${doc.fileName}:`, err);
-      try { await worker.terminate(); } catch { /* ignore */ }
+      try {
+        const w = await createWorker();
+        if (w) await w.terminate();
+      } catch { /* ignore */ }
       return {
         documentId: doc.id,
         documentType: doc.documentType,
-        fields: { extraction_error: String(err) },
+        rawText: `[OCR extraction failed: ${String(err)}]`,
+        extractionMethod: 'tesseract',
         confidence: 0,
       };
     }

@@ -1,75 +1,169 @@
-import { PrismaClient, Prisma, DocumentType, ComplianceSeverity, FindingType } from '@prisma/client';
+//
+// CargoTrack Risk Intelligence Agent — Tool Implementations
+//
+// This module implements AgentDataAccess — the concrete tools that the
+// Shipment Risk Intelligence Agent calls during its analysis.
+//
+// v3.1: Redesigned for Shipment Risk Intelligence Engine.
+//   - extractDocumentText() returns raw text for LLM reasoning
+//   - createFinding() stores evidence, reasoning, confidence, recommendedAction
+//   - finalizeReport() stores overallRiskScore, riskLevel, executiveSummary, disposition
+//   - getRouteRiskContext() provides corridor-specific risk intelligence
+//
+
+import { PrismaClient } from '@prisma/client';
+import { DynamoDBClient, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { config } from '../config';
 import {
   AgentDataAccess,
   ShipmentRecord,
   DocumentRecord,
-  ExtractedDocumentFields,
+  ExtractedDocumentText,
+  RouteRiskContext,
   CreateFindingInput,
   CreateReportInput,
+  FinalizeReportInput,
   AuditEventInput,
 } from './contracts';
-import { dynamoAuditService } from '../services/dynamodb';
 import { extractorFactory } from '../services/extractor/factory';
 
-const prisma = new PrismaClient();
+// ─── DynamoDB client (optional audit trail) ───────────────────────────────────
 
-// ─── Required Documents Matrix ────────────────────────────────────────────────
-// Business rule: what documents are required for a given shipment profile.
-// Phase 3 can make this a database-backed configurable policy table.
+const dynamo = config.region
+  ? new DynamoDBClient({ region: config.region })
+  : null;
 
-const INTERNATIONAL_ORIGINS = ['US', 'USA', 'UK', 'EU', 'DE', 'FR', 'CN', 'IN', 'SG'];
-const COLD_CHAIN_TYPES = ['PHARMACEUTICAL', 'PERISHABLE', 'MEDICAL', 'FOOD'];
+// ─── Pre-computed route risk context ─────────────────────────────────────────
+// Used by get_route_risk_context tool. This is deterministic context that
+// helps Nova calibrate its risk assessment without needing to infer it.
+// Nova applies judgment on top of this context.
 
-function isInternational(origin: string, destination: string): boolean {
-  // Simple heuristic: if origin and destination are in different known country codes
-  const originUpper = origin.toUpperCase();
-  const destUpper = destination.toUpperCase();
-  return INTERNATIONAL_ORIGINS.some(c => originUpper.includes(c)) &&
-    INTERNATIONAL_ORIGINS.some(c => destUpper.includes(c)) &&
-    originUpper !== destUpper;
+interface RouteRiskEntry {
+  patterns: { origin: string[]; destination: string[] };
+  regulatoryNotes: string;
+  commonFindings: string[];
+  sanctionsStatus: 'CLEAR' | 'WATCH' | 'BLOCKED';
+  riskMultiplier: number;
 }
 
-// ─── Concrete Tools Implementation ───────────────────────────────────────────
+const ROUTE_RISK_DATA: RouteRiskEntry[] = [
+  {
+    patterns: { origin: ['US', 'USA', 'United States'], destination: ['DE', 'Germany', 'Hamburg', 'Berlin'] },
+    regulatoryNotes:
+      'US–Germany is a high-volume transatlantic corridor under EU Customs Union rules. ' +
+      'Electronics require CE marking for EU market entry. Dual-use goods (encryption, ' +
+      'RF equipment) may require export authorization under EAR. Customs declarations ' +
+      'must use EU Harmonized System codes. German customs (Zoll) average clearance ' +
+      'time: 1–3 business days for standard shipments.',
+    commonFindings: [
+      'HS code mismatch between invoice goods description and customs declaration',
+      'Missing CE marking declaration for electronics',
+      'Dual-use item classification check required',
+      'Consignee EORI number not present on commercial invoice',
+    ],
+    sanctionsStatus: 'CLEAR',
+    riskMultiplier: 1.0,
+  },
+  {
+    patterns: { origin: ['CN', 'China', 'Shenzhen', 'Shanghai', 'Guangzhou'], destination: ['US', 'USA', 'United States'] },
+    regulatoryNotes:
+      'China–US corridor is subject to heightened customs scrutiny under Section 301 tariffs. ' +
+      'Many electronics and machinery categories carry additional 7.5%–25% tariff surcharges. ' +
+      'ISF (Importer Security Filing) must be submitted 24 hours before cargo loading. ' +
+      'CBP random examination rates are elevated for this corridor.',
+    commonFindings: [
+      'Section 301 tariff applicability not assessed',
+      'ISF filing timestamp verification required',
+      'Undervaluation risk — declared value vs. market price discrepancy',
+      'Country of origin marking (Made in China) requirement on goods and packaging',
+    ],
+    sanctionsStatus: 'WATCH',
+    riskMultiplier: 1.4,
+  },
+  {
+    patterns: { origin: ['AE', 'UAE', 'Dubai', 'Abu Dhabi'], destination: ['US', 'USA', 'United States', 'EU', 'Europe'] },
+    regulatoryNotes:
+      'UAE is a significant transshipment hub. Goods originating outside UAE but ' +
+      'transshipping through Dubai require careful origin documentation. ' +
+      'Sanctions screening for Iranian-origin goods is mandatory for all UAE transshipments.',
+    commonFindings: [
+      'Transshipment origin documentation incomplete',
+      'Iranian origin goods screening required',
+      'Certificate of origin must specify manufacturing country not transshipment hub',
+    ],
+    sanctionsStatus: 'WATCH',
+    riskMultiplier: 1.3,
+  },
+  {
+    patterns: { origin: ['RU', 'Russia', 'Moscow'], destination: [] },
+    regulatoryNotes:
+      'Russia is subject to comprehensive export controls and sanctions (OFAC, EU, UK). ' +
+      'The vast majority of dual-use goods, electronics, and technology exports to Russia ' +
+      'are prohibited. Verify all parties against OFAC SDN list.',
+    commonFindings: [
+      'OFAC SDN screening required for all parties',
+      'Export Control Classification Number (ECCN) assessment mandatory',
+      'Financial transaction sanctions risk assessment required',
+    ],
+    sanctionsStatus: 'BLOCKED',
+    riskMultiplier: 2.5,
+  },
+];
 
-export class ComplianceAgentTools implements AgentDataAccess {
+const DEFAULT_ROUTE_CONTEXT: RouteRiskContext = {
+  corridor: 'GENERAL',
+  regulatoryNotes:
+    'Standard international shipping corridor. Verify all parties against sanctions lists. ' +
+    'Ensure HS codes, declared values, and goods descriptions are consistent across all documents. ' +
+    'Check import/export license requirements for the specific goods category.',
+  commonFindings: [
+    'Document consistency check (invoice, B/L, customs declaration)',
+    'Sanctions screening for all named parties',
+    'HS code validation against goods description',
+  ],
+  sanctionsStatus: 'CLEAR',
+  riskMultiplier: 1.0,
+};
 
-  /** Tool: get_shipment_record */
+function matchesPattern(value: string, patterns: string[]): boolean {
+  if (patterns.length === 0) return false;
+  const normalized = value.toLowerCase();
+  return patterns.some((p) => normalized.includes(p.toLowerCase()));
+}
+
+// ─── Tool implementation class ────────────────────────────────────────────────
+
+export class AgentTools implements AgentDataAccess {
+  constructor(private prisma: PrismaClient) {}
+
+  // ─── get_shipment_profile ─────────────────────────────────────────────────
+
   async getShipment(shipmentId: string): Promise<ShipmentRecord | null> {
-    const s = await prisma.shipment.findUnique({
+    const shipment = await this.prisma.shipment.findUnique({
       where: { id: shipmentId },
-      select: {
-        id: true,
-        trackingNumber: true,
-        senderName: true,
-        receiverName: true,
-        origin: true,
-        destination: true,
-        shipmentType: true,
-        carrierName: true,
-        weight: true,
-        status: true,
-      },
     });
 
-    if (!s) return null;
+    if (!shipment) return null;
 
     return {
-      id: s.id,
-      trackingNumber: s.trackingNumber,
-      senderName: s.senderName,
-      receiverName: s.receiverName,
-      origin: s.origin,
-      destination: s.destination,
-      shipmentType: s.shipmentType,
-      carrierName: s.carrierName,
-      weight: s.weight,
-      status: s.status,
+      id: shipment.id,
+      trackingNumber: shipment.trackingNumber,
+      senderName: shipment.senderName,
+      receiverName: shipment.receiverName,
+      origin: shipment.origin,
+      destination: shipment.destination,
+      shipmentType: shipment.shipmentType,
+      carrierName: shipment.carrierName ?? null,
+      weight: shipment.weight,
+      status: shipment.status,
+      description: shipment.description ?? null,
     };
   }
 
-  /** Tool: get_uploaded_documents */
+  // ─── get_uploaded_documents ───────────────────────────────────────────────
+
   async getDocuments(shipmentId: string): Promise<DocumentRecord[]> {
-    const docs = await prisma.shipmentDocument.findMany({
+    const docs = await this.prisma.shipmentDocument.findMany({
       where: { shipmentId },
       orderBy: { uploadedAt: 'asc' },
     });
@@ -85,121 +179,179 @@ export class ComplianceAgentTools implements AgentDataAccess {
     }));
   }
 
-  /** Tool: determine_required_documents (pure business logic — no DB) */
-  getRequiredDocumentTypes(
-    shipmentType: string,
-    origin: string,
-    destination: string
-  ): DocumentType[] {
-    const required: DocumentType[] = ['INVOICE'];
+  // ─── extract_document_text ────────────────────────────────────────────────
+  //
+  // v3.1: Returns raw document text for LLM analysis.
+  // The extractor chain (Textract → pdf-parse → tesseract → mock) extracts
+  // readable text. The LLM then reasons over the full text content.
+  //
+  // This is the core change from v3.0: we no longer pre-parse fields.
+  // Nova reads the document as a human analyst would.
 
-    const international = isInternational(origin, destination);
-    if (international) {
-      required.push('CUSTOMS');
-      required.push('BILL_OF_LADING');
-    } else {
-      required.push('SHIPPING_LABEL');
-    }
-
-    const isColdChain = COLD_CHAIN_TYPES.some(t =>
-      shipmentType.toUpperCase().includes(t)
+  async extractDocumentText(doc: DocumentRecord): Promise<ExtractedDocumentText> {
+    const result = await extractorFactory.extract(doc);
+    console.log(
+      `[AgentTools] Extracted text via ${result.extractionMethod}: ` +
+      `${result.rawText.length} chars, confidence: ${result.confidence.toFixed(2)}`
     );
-    if (isColdChain) {
-      required.push('SHIPPING_MANIFEST');
+    return result;
+  }
+
+  // ─── get_route_risk_context ───────────────────────────────────────────────
+  //
+  // Returns pre-computed risk context for the shipping corridor.
+  // This is deterministic data — not LLM-generated. It gives Nova the
+  // regulatory background to calibrate its risk assessment.
+
+  getRouteRiskContext(origin: string, destination: string, _cargoType: string): RouteRiskContext {
+    for (const entry of ROUTE_RISK_DATA) {
+      const originMatch = matchesPattern(origin, entry.patterns.origin);
+      const destMatch =
+        entry.patterns.destination.length === 0 || matchesPattern(destination, entry.patterns.destination);
+
+      if (originMatch && destMatch) {
+        const corridor = `${origin} → ${destination}`;
+        console.log(`[AgentTools] Route risk context matched: ${corridor} (multiplier: ${entry.riskMultiplier})`);
+        return {
+          corridor,
+          regulatoryNotes: entry.regulatoryNotes,
+          commonFindings: entry.commonFindings,
+          sanctionsStatus: entry.sanctionsStatus,
+          riskMultiplier: entry.riskMultiplier,
+        };
+      }
     }
 
-    return required;
+    const corridor = `${origin} → ${destination}`;
+    console.log(`[AgentTools] No specific route context for ${corridor} — using defaults`);
+    return { ...DEFAULT_ROUTE_CONTEXT, corridor };
   }
 
-  /**
-   * Tool: extract_document_fields
-   *
-   * Delegates to the DocumentExtractorFactory which selects the best
-   * available backend in priority order:
-   *   1. TextractExtractor  — AWS Textract (TEXTRACT_ENABLED=true + AWS + S3)
-   *   2. PdfTextExtractor   — pdf-parse offline (PDF files)
-   *   3. OcrExtractor       — tesseract.js offline (image files)
-   *   4. MockExtractor      — synthetic data (always available)
-   *
-   * The compliance workflow works regardless of AWS availability.
-   */
-  async extractDocumentFields(doc: DocumentRecord): Promise<ExtractedDocumentFields> {
-    return extractorFactory.extract(doc);
-  }
+  // ─── record_risk_finding ──────────────────────────────────────────────────
 
-  /** Tool: create_compliance_finding */
   async createFinding(input: CreateFindingInput): Promise<{ id: string }> {
-    const finding = await prisma.complianceFinding.create({
+    const finding = await this.prisma.complianceFinding.create({
       data: {
         reportId: input.reportId,
         documentId: input.documentId ?? null,
-        findingType: input.findingType as FindingType,
-        severity: input.severity as ComplianceSeverity,
+        findingType: input.findingType,
+        severity: input.severity,
         description: input.description,
-        // Prisma's Json field requires Prisma.InputJsonValue — plain objects
-        // must be cast explicitly. null is handled via Prisma.DbNull.
-        detail: input.detail
-          ? (input.detail as unknown as Prisma.InputJsonValue)
-          : Prisma.DbNull,
+        detail: input.detail as any ?? null,
+        // v3.1: Risk intelligence fields
+        evidence: input.evidence ?? null,
+        reasoning: input.reasoning ?? null,
+        confidenceScore: input.confidenceScore ?? null,
+        recommendedAction: input.recommendedAction ?? null,
       },
     });
 
+    console.log(`[AgentTools] Created finding: ${input.findingType} / ${input.severity} (id: ${finding.id})`);
     return { id: finding.id };
   }
 
-  /** Tool: create_compliance_report */
+  // ─── create_compliance_report ─────────────────────────────────────────────
+
   async createReport(input: CreateReportInput): Promise<{ id: string }> {
-    // Upsert: if a report already exists (re-run), update it back to PENDING
-    const existing = await prisma.complianceReport.findUnique({
+    // Upsert: if a report already exists for this shipment, update it
+    const report = await this.prisma.complianceReport.upsert({
       where: { shipmentId: input.shipmentId },
-    });
-
-    if (existing) {
-      const updated = await prisma.complianceReport.update({
-        where: { id: existing.id },
-        data: { status: 'PENDING', agentRunId: input.agentRunId, summary: null },
-      });
-      // Delete old findings for a fresh run
-      await prisma.complianceFinding.deleteMany({ where: { reportId: existing.id } });
-      return { id: updated.id };
-    }
-
-    const report = await prisma.complianceReport.create({
-      data: {
+      create: {
         shipmentId: input.shipmentId,
         agentRunId: input.agentRunId,
         status: 'PENDING',
       },
+      update: {
+        agentRunId: input.agentRunId,
+        status: 'PENDING',
+        summary: null,
+        executiveSummary: null,
+        overallRiskScore: null,
+        riskLevel: null,
+        recommendedDisposition: null,
+        modelConfidence: null,
+      },
     });
 
+    // Delete any stale findings from a previous run
+    await this.prisma.complianceFinding.deleteMany({
+      where: { reportId: report.id },
+    });
+
+    console.log(`[AgentTools] Created/reset report for shipment ${input.shipmentId} (id: ${report.id})`);
     return { id: report.id };
   }
 
-  /** Tool: finalize_report */
-  async finalizeReport(
-    reportId: string,
-    status: 'PASSED' | 'FAILED' | 'PARTIAL',
-    summary: string
-  ): Promise<void> {
-    await prisma.complianceReport.update({
-      where: { id: reportId },
-      data: { status, summary },
+  // ─── finalize_risk_assessment ─────────────────────────────────────────────
+
+  async finalizeReport(input: FinalizeReportInput): Promise<void> {
+    await this.prisma.complianceReport.update({
+      where: { id: input.reportId },
+      data: {
+        status: input.status,
+        summary: input.summary,
+        // v3.1: Risk intelligence output
+        executiveSummary: input.executiveSummary ?? null,
+        overallRiskScore: input.overallRiskScore ?? null,
+        riskLevel: input.riskLevel ?? null,
+        recommendedDisposition: input.recommendedDisposition ?? null,
+        modelId: input.modelId ?? null,
+        modelConfidence: input.modelConfidence ?? null,
+        processingTimeMs: input.processingTimeMs ?? null,
+      },
+    });
+
+    console.log(
+      `[AgentTools] Finalized report ${input.reportId}: ` +
+      `status=${input.status}, riskLevel=${input.riskLevel ?? 'N/A'}, ` +
+      `riskScore=${input.overallRiskScore?.toFixed(2) ?? 'N/A'}`
+    );
+  }
+
+  // ─── Internal: read findings for report (used by mock runner) ────────────
+
+  async getReportFindings(reportId: string): Promise<Array<{
+    id: string;
+    severity: string;
+    description: string;
+    recommendedAction: string | null;
+  }>> {
+    return this.prisma.complianceFinding.findMany({
+      where: { reportId },
+      select: {
+        id: true,
+        severity: true,
+        description: true,
+        recommendedAction: true,
+      },
     });
   }
 
-  /** Tool: generate_audit_event */
+  // ─── generate_audit_event (DynamoDB) ─────────────────────────────────────
+
   async publishAuditEvent(input: AuditEventInput): Promise<void> {
-    await dynamoAuditService.writeAuditEvent({
-      pk: `SHIPMENT#${input.shipmentId}`,
-      sk: `COMPLIANCE#${input.timestamp}`,
-      eventType: input.eventType,
-      shipmentId: input.shipmentId,
-      agentRunId: input.agentRunId,
-      summary: input.summary,
-      timestamp: input.timestamp,
-    });
+    if (!dynamo || !config.dynamoAuditTable) {
+      console.log('[AgentTools] DynamoDB not configured — skipping audit event');
+      return;
+    }
+
+    try {
+      await dynamo.send(
+        new PutItemCommand({
+          TableName: config.dynamoAuditTable,
+          Item: {
+            pk: { S: `SHIPMENT#${input.shipmentId}` },
+            sk: { S: `COMPLIANCE#${input.timestamp}` },
+            eventType: { S: input.eventType },
+            summary: { S: input.summary },
+            agentRunId: { S: input.agentRunId },
+            timestamp: { S: input.timestamp },
+          },
+        })
+      );
+    } catch (err) {
+      // Audit events are best-effort — don't fail the compliance run
+      console.warn('[AgentTools] Failed to publish audit event to DynamoDB:', err);
+    }
   }
 }
-
-// Singleton instance — shared by the compliance handler
-export const agentTools = new ComplianceAgentTools();

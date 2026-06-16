@@ -1,7 +1,12 @@
 /**
  * TextractExtractor — Backend 1 (Primary)
  *
- * Wraps the existing TextractService and adapts it to DocumentExtractor.
+ * Wraps the TextractService and adapts it to DocumentExtractor.
+ *
+ * v3.1 CHANGE: Returns ExtractedDocumentText (rawText) instead of
+ * ExtractedDocumentFields (key-value map). Textract's LINE blocks are
+ * concatenated into full readable text for LLM analysis.
+ *
  * Active when:
  *   - TEXTRACT_ENABLED=true  AND
  *   - AWS_DEFAULT_REGION is set  AND
@@ -10,7 +15,7 @@
  */
 
 import { DocumentExtractor } from './interface';
-import { DocumentRecord, ExtractedDocumentFields } from '../../agent/contracts';
+import { DocumentRecord, ExtractedDocumentText } from '../../agent/contracts';
 import { textractService } from '../textract';
 import { config } from '../../config';
 
@@ -31,9 +36,9 @@ export class TextractExtractor implements DocumentExtractor {
     return SUPPORTED_TYPES.some((t) => mime.includes(t.split('/')[1]));
   }
 
-  async extract(doc: DocumentRecord): Promise<ExtractedDocumentFields> {
-    console.log(`[TextractExtractor] Extracting: ${doc.fileName}`);
-    return textractService.extractFields(doc);
+  async extract(doc: DocumentRecord): Promise<ExtractedDocumentText> {
+    console.log(`[TextractExtractor] Extracting text: ${doc.fileName}`);
+    return textractService.extractText(doc);
   }
 }
 

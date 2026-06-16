@@ -6,6 +6,9 @@
  *   2. Environment configuration (TEXTRACT_ENABLED, MOCK_AGENT, AWS creds)
  *   3. Library availability (pdf-parse, tesseract.js)
  *
+ * v3.1: Returns ExtractedDocumentText (raw text) — not ExtractedDocumentFields.
+ * The LLM reads the raw text and reasons over it directly.
+ *
  * Selection order (first canHandle() winner wins):
  *   TextractExtractor  → Requires: TEXTRACT_ENABLED=true + AWS creds + S3_BUCKET
  *   PdfTextExtractor   → Requires: PDF + pdf-parse installed
@@ -13,12 +16,12 @@
  *   MockExtractor      → Always available (final fallback)
  *
  * Usage:
- *   const extractor = extractorFactory.select(doc);
- *   const result = await extractor.extract(doc);
+ *   const result = await extractorFactory.extract(doc);
+ *   // result.rawText → hand to LLM for analysis
  */
 
 import { DocumentExtractor } from './interface';
-import { DocumentRecord, ExtractedDocumentFields } from '../../agent/contracts';
+import { DocumentRecord, ExtractedDocumentText } from '../../agent/contracts';
 import { textractExtractor } from './textract-extractor';
 import { pdfTextExtractor } from './pdf-extractor';
 import { ocrExtractor } from './ocr-extractor';
@@ -51,8 +54,9 @@ class DocumentExtractorFactory {
 
   /**
    * Convenience method: select + extract in one call.
+   * Returns raw document text for LLM analysis.
    */
-  async extract(doc: DocumentRecord): Promise<ExtractedDocumentFields> {
+  async extract(doc: DocumentRecord): Promise<ExtractedDocumentText> {
     const extractor = this.select(doc);
     return extractor.extract(doc);
   }

@@ -10,10 +10,14 @@
  *   1. TextractExtractor  — AWS Textract (requires S3 + Textract access)
  *   2. PdfTextExtractor   — pdf-parse (works offline, PDFs only)
  *   3. OcrExtractor       — tesseract.js (works offline, images only)
- *   4. MockExtractor      — synthetic data (always works, for dev/test)
+ *   4. MockExtractor      — realistic document text (always works)
+ *
+ * v3.1 CHANGE: extract() now returns ExtractedDocumentText (raw text)
+ * instead of ExtractedDocumentFields (key-value map).
+ * The intelligence is in the LLM reasoning, not in the extractor parsing.
  */
 
-import { DocumentRecord, ExtractedDocumentFields } from '../../agent/contracts';
+import { DocumentRecord, ExtractedDocumentText } from '../../agent/contracts';
 
 export interface DocumentExtractor {
   /**
@@ -28,8 +32,9 @@ export interface DocumentExtractor {
   canHandle(doc: DocumentRecord): boolean;
 
   /**
-   * Extract structured fields from the document.
-   * Must never throw — return empty fields with confidence=0 on unrecoverable failure.
+   * Extract raw text content from the document.
+   * Returns full readable text suitable for LLM analysis.
+   * Must never throw — return empty rawText with confidence=0 on failure.
    */
-  extract(doc: DocumentRecord): Promise<ExtractedDocumentFields>;
+  extract(doc: DocumentRecord): Promise<ExtractedDocumentText>;
 }

@@ -8,7 +8,7 @@ import {
 } from '@aws-sdk/client-textract';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { config } from '../config';
-import { DocumentRecord, ExtractedDocumentFields } from '../agent/contracts';
+import { DocumentRecord, ExtractedDocumentFields, ExtractedDocumentText } from '../agent/contracts';
 import { DocumentType } from '@prisma/client';
 
 // ─── Textract Service ─────────────────────────────────────────────────────────
@@ -82,6 +82,18 @@ function parseTextractBlocks(blocks: Block[]): Record<string, string> {
   }
 
   return kvPairs;
+}
+
+/**
+ * Concatenate Textract LINE blocks into human-readable text.
+ * This is the v3.1 output format — raw text for LLM analysis.
+ */
+function blocksToRawText(blocks: Block[]): string {
+  return blocks
+    .filter((b) => b.BlockType === 'LINE')
+    .map((b) => b.Text ?? '')
+    .filter(Boolean)
+    .join('\n');
 }
 
 function collectText(block: Block, index: Map<string, Block>): string {
@@ -188,9 +200,37 @@ export class TextractService {
   }
 
   /**
-   * Extract fields from a document.
-   * Dispatches to sync (images) or async (PDF) Textract based on MIME type.
-   * Falls back to mock data if AWS is not configured.
+   * v3.1: Extract raw text from a document for LLM analysis.
+   * Returns full readable text by concatenating Textract LINE blocks.
+   * Falls back to mock text if AWS is not configured.
+   */
+  async extractText(doc: DocumentRecord): Promise<ExtractedDocumentText> {
+    if (this.isMock || !this.textract) {
+      return this.mockExtractText(doc);
+    }
+
+    const mimeType = doc.fileType.toLowerCase();
+
+    if (!ALL_SUPPORTED.some((m) => mimeType.includes(m.split('/')[1]))) {
+      console.warn(`[textract] Unsupported MIME type: ${mimeType} — using mock text`);
+      return this.mockExtractText(doc);
+    }
+
+    try {
+      if (SYNC_MIME_TYPES.some((m) => mimeType.includes(m.split('/')[1]))) {
+        return await this.syncExtractText(doc);
+      } else {
+        return await this.asyncExtractText(doc);
+      }
+    } catch (err) {
+      console.error(`[textract] Text extraction failed for doc ${doc.id} — falling back to mock:`, err);
+      return this.mockExtractText(doc);
+    }
+  }
+
+  /**
+   * @deprecated Use extractText() for v3.1 LLM-driven compliance.
+   * Kept for backward compatibility only.
    */
   async extractFields(doc: DocumentRecord): Promise<ExtractedDocumentFields> {
     if (this.isMock || !this.textract) {
@@ -216,7 +256,40 @@ export class TextractService {
     }
   }
 
-  // ── Synchronous extraction (images) ────────────────────────────────────────
+  // ── Synchronous extraction (images) — raw text output ─────────────────────
+
+  private async syncExtractText(doc: DocumentRecord): Promise<ExtractedDocumentText> {
+    console.log(`[textract][SYNC] Analyzing for text: ${doc.fileName}`);
+
+    const command = new AnalyzeDocumentCommand({
+      Document: {
+        S3Object: {
+          Bucket: this.bucket,
+          Name: doc.fileName,
+        },
+      },
+      FeatureTypes: ['FORMS' as FeatureType, 'TABLES' as FeatureType],
+    });
+
+    const response = await this.textract!.send(command);
+    const blocks = response.Blocks ?? [];
+
+    const rawText = blocksToRawText(blocks);
+    const confidence = averageConfidence(blocks);
+
+    console.log(`[textract][SYNC] Extracted ${rawText.length} chars, confidence: ${confidence.toFixed(2)}`);
+
+    return {
+      documentId: doc.id,
+      documentType: doc.documentType,
+      rawText,
+      extractionMethod: 'textract',
+      confidence,
+      pageCount: 1,
+    };
+  }
+
+  // ── Synchronous extraction (images) — key-value fields output (deprecated) ─
 
   private async syncExtract(doc: DocumentRecord): Promise<ExtractedDocumentFields> {
     console.log(`[textract][SYNC] Analyzing: ${doc.fileName}`);
@@ -247,7 +320,78 @@ export class TextractService {
     };
   }
 
-  // ── Asynchronous extraction (PDFs) ─────────────────────────────────────────
+  // ── Asynchronous extraction (PDFs) — raw text output ──────────────────────
+
+  private async asyncExtractText(doc: DocumentRecord): Promise<ExtractedDocumentText> {
+    console.log(`[textract][ASYNC] Starting text analysis: ${doc.fileName}`);
+
+    const startCommand = new StartDocumentAnalysisCommand({
+      DocumentLocation: {
+        S3Object: {
+          Bucket: this.bucket,
+          Name: doc.fileName,
+        },
+      },
+      FeatureTypes: ['FORMS' as FeatureType, 'TABLES' as FeatureType],
+    });
+
+    const startResponse = await this.textract!.send(startCommand);
+    const jobId = startResponse.JobId;
+    if (!jobId) throw new Error('Textract async job started but returned no JobId');
+
+    console.log(`[textract][ASYNC] JobId: ${jobId} — polling...`);
+
+    const allBlocks: Block[] = [];
+    let attempts = 0;
+    let pageCount = 1;
+
+    while (attempts < MAX_POLL_ATTEMPTS) {
+      attempts++;
+      await sleep(POLL_INTERVAL_MS);
+
+      const getCommand = new GetDocumentAnalysisCommand({ JobId: jobId });
+      const result = await this.textract!.send(getCommand);
+
+      if (result.JobStatus === 'FAILED') {
+        throw new Error(`Textract async job failed: ${result.StatusMessage}`);
+      }
+
+      if (result.JobStatus === 'SUCCEEDED') {
+        allBlocks.push(...(result.Blocks ?? []));
+        let nextToken = result.NextToken;
+        while (nextToken) {
+          const pageResult = await this.textract!.send(
+            new GetDocumentAnalysisCommand({ JobId: jobId, NextToken: nextToken })
+          );
+          allBlocks.push(...(pageResult.Blocks ?? []));
+          nextToken = pageResult.NextToken;
+        }
+        // Count unique page numbers
+        const pageNums = new Set(allBlocks.map((b) => b.Page ?? 1));
+        pageCount = pageNums.size;
+
+        const rawText = blocksToRawText(allBlocks);
+        const confidence = averageConfidence(allBlocks);
+
+        console.log(`[textract][ASYNC] Complete — ${rawText.length} chars, ${pageCount} page(s), confidence: ${confidence.toFixed(2)}`);
+
+        return {
+          documentId: doc.id,
+          documentType: doc.documentType,
+          rawText,
+          extractionMethod: 'textract',
+          confidence,
+          pageCount,
+        };
+      }
+
+      console.log(`[textract][ASYNC] Job ${jobId} status: ${result.JobStatus} (attempt ${attempts}/${MAX_POLL_ATTEMPTS})`);
+    }
+
+    throw new Error(`Textract async job ${jobId} timed out after ${MAX_POLL_ATTEMPTS} poll attempts`);
+  }
+
+  // ── Asynchronous extraction (PDFs) — key-value fields output (deprecated) ──
 
   private async asyncExtract(doc: DocumentRecord): Promise<ExtractedDocumentFields> {
     console.log(`[textract][ASYNC] Starting analysis: ${doc.fileName}`);
@@ -319,7 +463,34 @@ export class TextractService {
     throw new Error(`Textract async job ${jobId} timed out after ${MAX_POLL_ATTEMPTS} poll attempts`);
   }
 
-  // ── Mock extraction ─────────────────────────────────────────────────────────
+  // ── Mock text extraction (v3.1) ─────────────────────────────────────────────
+
+  private mockExtractText(doc: DocumentRecord): ExtractedDocumentText {
+    // Import mock extractor's realistic text
+    const { mockExtractor } = require('../extractor/mock-extractor');
+    // Run synchronously by delegating to async method via immediate resolution
+    // (mock returns synchronously in practice)
+    console.log(`[textract][MOCK] Returning mock document text for ${doc.documentType} (doc: ${doc.id})`);
+    // Produce inline mock text consistent with the mock extractor
+    const mockTexts: Record<string, string> = {
+      INVOICE: `COMMERCIAL INVOICE\nInvoice Number: INV-MOCK-${Date.now()}\nSeller: Mock Sender Corp\nBuyer: Mock Receiver Ltd\nTotal: USD 1,500.00\nGoods: Electronic equipment`,
+      CUSTOMS: `CUSTOMS DECLARATION\nHS Code: 8471.30.00\nDeclared Value: USD 1,500.00\nOrigin: United States\nDestination: Germany\nGoods: Electronic equipment`,
+      BILL_OF_LADING: `BILL OF LADING\nB/L No: BOL-MOCK-${Date.now()}\nCarrier: Mock Shipping Lines\nVessel: MV CargoTrack Express\nPort of Loading: New York, USA\nPort of Discharge: Hamburg, Germany\nGross Weight: 5.2 KG`,
+      SHIPPING_LABEL: `SHIPPING LABEL\nTracking: TRK-MOCK-${Date.now()}\nService: EXPRESS\nWeight: 5.2 KG\nFrom: Mock Sender Corp, New York, NY\nTo: Mock Receiver Ltd, Hamburg, DE`,
+      SHIPPING_MANIFEST: `SHIPPING MANIFEST\nManifest No: MAN-MOCK-${Date.now()}\nTotal Packages: 1\nTotal Weight: 5.2 KG\nHazmat: NO`,
+      PROOF_OF_DELIVERY: `PROOF OF DELIVERY\nDelivery Date: ${new Date().toISOString().split('T')[0]}\nDelivered To: Mock Receiver\nSignature: J. Smith\nCondition: Good`,
+    };
+    return {
+      documentId: doc.id,
+      documentType: doc.documentType,
+      rawText: mockTexts[doc.documentType] ?? `UNCLASSIFIED DOCUMENT\nContent requires manual review.`,
+      extractionMethod: 'mock',
+      confidence: 0.92,
+      pageCount: 1,
+    };
+  }
+
+  // ── Mock key-value extraction (deprecated) ─────────────────────────────────
 
   private mockExtract(doc: DocumentRecord): ExtractedDocumentFields {
     const fields = { ...(MOCK_FIELDS[doc.documentType] ?? MOCK_FIELDS.OTHER) };

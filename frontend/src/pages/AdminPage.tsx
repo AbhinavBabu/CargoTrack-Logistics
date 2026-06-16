@@ -8,7 +8,7 @@ import toast from 'react-hot-toast';
 import {
   Search, Shield, MapPin, User, ChevronDown, X, FileText,
   Download, Package, TrendingUp, Clock, CheckCircle, AlertTriangle,
-  Bot
+  Bot, Brain, AlertCircle, Info, Lightbulb, RefreshCw, Zap
 } from 'lucide-react';
 
 const STATUSES: ShipmentStatus[] = ['CREATED', 'PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'DELAYED', 'CANCELLED'];
@@ -35,11 +35,25 @@ interface ComplianceFinding {
   findingType: string;
   severity: string;
   description: string;
+  // v3.1: Risk Intelligence fields
+  evidence: string | null;
+  reasoning: string | null;
+  confidenceScore: number | null;
+  recommendedAction: string | null;
+  documentId: string | null;
 }
 
 interface ComplianceReport {
   status: string;
   summary: string | null;
+  // v3.1: Risk Intelligence fields
+  overallRiskScore: number | null;
+  riskLevel: string | null;
+  executiveSummary: string | null;
+  recommendedDisposition: string | null;
+  modelId: string | null;
+  modelConfidence: number | null;
+  processingTimeMs: number | null;
   findings: ComplianceFinding[];
   createdAt: string;
 }
@@ -79,9 +93,158 @@ function SeverityBadge({ severity }: { severity: string }) {
   );
 }
 
+/** Visual 0.0–1.0 risk score gauge */
+function RiskScoreGauge({ score, riskLevel }: { score: number; riskLevel: string | null }) {
+  const percentage = Math.round(score * 100);
+
+  const colorClass =
+    riskLevel === 'CRITICAL' ? 'text-red-400' :
+    riskLevel === 'HIGH'     ? 'text-orange-400' :
+    riskLevel === 'MEDIUM'   ? 'text-yellow-400' :
+                               'text-emerald-400';
+
+  const bgClass =
+    riskLevel === 'CRITICAL' ? 'bg-red-500/20 border-red-500/30' :
+    riskLevel === 'HIGH'     ? 'bg-orange-500/20 border-orange-500/30' :
+    riskLevel === 'MEDIUM'   ? 'bg-yellow-500/20 border-yellow-500/30' :
+                               'bg-emerald-500/20 border-emerald-500/30';
+
+  const barClass =
+    riskLevel === 'CRITICAL' ? 'bg-red-500' :
+    riskLevel === 'HIGH'     ? 'bg-orange-500' :
+    riskLevel === 'MEDIUM'   ? 'bg-yellow-500' :
+                               'bg-emerald-500';
+
+  return (
+    <div className={`rounded-xl border p-4 ${bgClass}`}>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Zap className={`w-4 h-4 ${colorClass}`} />
+          <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Risk Score</span>
+        </div>
+        <div className="text-right">
+          <span className={`text-2xl font-bold ${colorClass}`}>{percentage}</span>
+          <span className="text-xs text-slate-500">/100</span>
+        </div>
+      </div>
+      {/* Progress bar */}
+      <div className="h-2 bg-slate-700/60 rounded-full overflow-hidden mb-2">
+        <div
+          className={`h-full ${barClass} rounded-full transition-all duration-500`}
+          style={{ width: `${percentage}%` }}
+        />
+      </div>
+      {riskLevel && (
+        <div className="flex items-center justify-between">
+          <span className={`text-xs font-semibold ${colorClass}`}>{riskLevel} RISK</span>
+          <span className="text-xs text-slate-600">AI-assessed</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Disposition recommendation banner */
+function DispositionBanner({ disposition }: { disposition: string }) {
+  const isHold = disposition.toUpperCase().includes('HOLD') || disposition.toUpperCase().includes('CRITICAL');
+  const isConditional = disposition.toUpperCase().includes('CONDITIONAL') || disposition.toUpperCase().includes('MEDIUM');
+  const isClear = disposition.toUpperCase().includes('CLEAR') || disposition.toUpperCase().includes('PROCEED');
+
+  const style = isHold
+    ? 'bg-red-500/10 border-red-500/30 text-red-300'
+    : isConditional
+    ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-300'
+    : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300';
+
+  const Icon = isHold ? AlertCircle : isConditional ? AlertTriangle : CheckCircle;
+
+  return (
+    <div className={`flex items-start gap-2.5 p-3 rounded-lg border ${style}`}>
+      <Icon className="w-4 h-4 flex-shrink-0 mt-0.5" />
+      <p className="text-xs leading-relaxed font-medium">{disposition}</p>
+    </div>
+  );
+}
+
+/** Single finding card with expandable evidence/reasoning */
+function FindingCard({ finding }: { finding: ComplianceFinding }) {
+  const [expanded, setExpanded] = useState(false);
+  const hasIntelligence = finding.evidence || finding.reasoning || finding.recommendedAction;
+
+  return (
+    <div className="bg-slate-800/60 border border-slate-700/50 rounded-lg overflow-hidden">
+      {/* Finding header — always visible */}
+      <div
+        className={`p-3 ${hasIntelligence ? 'cursor-pointer hover:bg-slate-800' : ''} transition-colors`}
+        onClick={() => hasIntelligence && setExpanded(!expanded)}
+      >
+        <div className="flex items-center justify-between gap-2 mb-1.5">
+          <div className="flex items-center gap-2 min-w-0">
+            <p className="text-xs font-semibold text-slate-200 truncate">
+              {finding.findingType.replace(/_/g, ' ')}
+            </p>
+            {finding.confidenceScore !== null && (
+              <span className="text-xs text-slate-600 flex-shrink-0">
+                {Math.round((finding.confidenceScore ?? 0) * 100)}% confidence
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <SeverityBadge severity={finding.severity} />
+            {hasIntelligence && (
+              <ChevronDown className={`w-3.5 h-3.5 text-slate-500 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+            )}
+          </div>
+        </div>
+        <p className="text-xs text-slate-400 leading-relaxed">{finding.description}</p>
+      </div>
+
+      {/* Expanded intelligence panel */}
+      {expanded && hasIntelligence && (
+        <div className="border-t border-slate-700/50 divide-y divide-slate-700/30">
+          {finding.evidence && (
+            <div className="px-3 py-2.5">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <FileText className="w-3 h-3 text-blue-400" />
+                <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider">Evidence</span>
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed font-mono bg-slate-900/60 rounded p-2">
+                {finding.evidence}
+              </p>
+            </div>
+          )}
+
+          {finding.reasoning && (
+            <div className="px-3 py-2.5">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <Brain className="w-3 h-3 text-purple-400" />
+                <span className="text-xs font-semibold text-purple-400 uppercase tracking-wider">AI Reasoning</span>
+              </div>
+              <p className="text-xs text-slate-300 leading-relaxed">{finding.reasoning}</p>
+            </div>
+          )}
+
+          {finding.recommendedAction && (
+            <div className="px-3 py-2.5">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <Lightbulb className="w-3 h-3 text-amber-400" />
+                <span className="text-xs font-semibold text-amber-400 uppercase tracking-wider">Recommended Action</span>
+              </div>
+              <p className="text-xs text-slate-200 leading-relaxed">{finding.recommendedAction}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Document Drawer ──────────────────────────────────────────────────────────
 
 function DocumentDrawer({ shipment, onClose }: { shipment: Shipment; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const [triggering, setTriggering] = useState(false);
+
   const { data: docs, isLoading } = useQuery<Document[]>({
     queryKey: ['admin-docs', shipment.id],
     queryFn: async () => {
@@ -90,7 +253,7 @@ function DocumentDrawer({ shipment, onClose }: { shipment: Shipment; onClose: ()
     },
   });
 
-  const { data: compliance } = useQuery<ComplianceReport>({
+  const { data: compliance, isLoading: complianceLoading } = useQuery<ComplianceReport>({
     queryKey: ['admin-compliance', shipment.id],
     queryFn: async () => {
       const { data } = await api.get(`/admin/compliance/${shipment.id}`);
@@ -98,6 +261,22 @@ function DocumentDrawer({ shipment, onClose }: { shipment: Shipment; onClose: ()
     },
     retry: false,
   });
+
+  const handleRetrigger = async () => {
+    setTriggering(true);
+    try {
+      await api.post(`/admin/compliance/trigger/${shipment.id}`);
+      toast.success('Risk intelligence analysis started');
+      // Poll until report updates
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['admin-compliance', shipment.id] });
+      }, 4000);
+    } catch {
+      toast.error('Failed to trigger analysis');
+    } finally {
+      setTriggering(false);
+    }
+  };
 
   const handleDownload = async (docId: string, name: string) => {
     try {
@@ -115,7 +294,7 @@ function DocumentDrawer({ shipment, onClose }: { shipment: Shipment; onClose: ()
     }
   };
 
-  const complianceColor: Record<string, string> = {
+  const complianceStatusColor: Record<string, string> = {
     PASSED: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
     FAILED: 'text-red-400 bg-red-500/10 border-red-500/20',
     PARTIAL: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20',
@@ -143,46 +322,123 @@ function DocumentDrawer({ shipment, onClose }: { shipment: Shipment; onClose: ()
           </button>
         </div>
 
-        <div className="flex-1 p-5 space-y-5">
-          {/* Compliance Report */}
+        <div className="flex-1 p-5 space-y-6">
+
+          {/* ── AI Risk Intelligence Section ──────────────────────────── */}
           <div>
-            <div className="flex items-center gap-2 mb-3">
-              <Bot className="w-4 h-4 text-amber-400" />
-              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">AI Compliance</h3>
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2">
+                <Brain className="w-4 h-4 text-purple-400" />
+                <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
+                  Shipment Risk Intelligence
+                </h3>
+              </div>
+              <button
+                onClick={handleRetrigger}
+                disabled={triggering}
+                className="flex items-center gap-1 px-2 py-1 text-xs bg-slate-800 border border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600 rounded-lg transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3 h-3 ${triggering ? 'animate-spin' : ''}`} />
+                Re-analyze
+              </button>
             </div>
 
-            {compliance ? (
+            {complianceLoading ? (
+              <div className="flex justify-center py-8">
+                <div className="w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : compliance ? (
               <div className="space-y-3">
-                <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium ${complianceColor[compliance.status] ?? complianceColor.PENDING}`}>
-                  {compliance.status}
+                {/* Status + model info */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium ${complianceStatusColor[compliance.status] ?? complianceStatusColor.PENDING}`}>
+                    {compliance.status}
+                  </div>
+                  {compliance.modelId && (
+                    <div className="flex items-center gap-1 px-2 py-1 bg-slate-800 border border-slate-700 rounded-lg">
+                      <Bot className="w-3 h-3 text-slate-500" />
+                      <span className="text-xs text-slate-500 font-mono truncate max-w-[160px]">{compliance.modelId}</span>
+                    </div>
+                  )}
+                  {compliance.processingTimeMs && (
+                    <span className="text-xs text-slate-600">{(compliance.processingTimeMs / 1000).toFixed(1)}s</span>
+                  )}
                 </div>
-                {compliance.summary && (
+
+                {/* Risk score gauge */}
+                {compliance.overallRiskScore !== null && compliance.overallRiskScore !== undefined && (
+                  <RiskScoreGauge
+                    score={compliance.overallRiskScore}
+                    riskLevel={compliance.riskLevel}
+                  />
+                )}
+
+                {/* Executive summary */}
+                {compliance.executiveSummary && (
+                  <div className="bg-slate-800/40 border border-slate-700/40 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Info className="w-3.5 h-3.5 text-blue-400" />
+                      <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider">Executive Summary</span>
+                    </div>
+                    <p className="text-sm text-slate-300 leading-relaxed">{compliance.executiveSummary}</p>
+                  </div>
+                )}
+
+                {/* Disposition */}
+                {compliance.recommendedDisposition && (
+                  <DispositionBanner disposition={compliance.recommendedDisposition} />
+                )}
+
+                {/* Fallback: legacy summary */}
+                {!compliance.executiveSummary && compliance.summary && (
                   <p className="text-sm text-slate-400 leading-relaxed">{compliance.summary}</p>
                 )}
+
+                {/* Findings */}
                 {compliance.findings.length > 0 && (
                   <div className="space-y-2">
+                    <div className="flex items-center gap-2 pt-1">
+                      <AlertTriangle className="w-3.5 h-3.5 text-slate-500" />
+                      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        {compliance.findings.length} Finding{compliance.findings.length !== 1 ? 's' : ''}
+                      </span>
+                      <span className="text-xs text-slate-700 ml-auto">Click to expand</span>
+                    </div>
                     {compliance.findings.map((f) => (
-                      <div key={f.id} className="bg-slate-800/60 border border-slate-700/50 rounded-lg p-3">
-                        <div className="flex items-center justify-between gap-2 mb-1">
-                          <p className="text-xs font-medium text-slate-300">{f.findingType.replace(/_/g, ' ')}</p>
-                          <SeverityBadge severity={f.severity} />
-                        </div>
-                        <p className="text-xs text-slate-500">{f.description}</p>
-                      </div>
+                      <FindingCard key={f.id} finding={f} />
                     ))}
                   </div>
                 )}
+
+                {compliance.findings.length === 0 && compliance.status === 'PASSED' && (
+                  <div className="flex items-center gap-2 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                    <CheckCircle className="w-4 h-4 text-emerald-400" />
+                    <p className="text-xs text-emerald-300">No compliance risks identified</p>
+                  </div>
+                )}
+
+                {/* Model confidence */}
+                {compliance.modelConfidence !== null && compliance.modelConfidence !== undefined && (
+                  <p className="text-xs text-slate-600 text-right">
+                    Model confidence: {Math.round((compliance.modelConfidence ?? 0) * 100)}%
+                  </p>
+                )}
               </div>
             ) : (
-              <div className="bg-slate-800/40 border border-slate-700/30 rounded-lg p-3">
-                <p className="text-xs text-slate-600 italic">
-                  No compliance report yet. Agent runs when shipment reaches IN_TRANSIT.
+              <div className="bg-slate-800/40 border border-slate-700/30 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Bot className="w-4 h-4 text-slate-600" />
+                  <p className="text-xs text-slate-500 font-medium">No risk assessment yet</p>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  The Risk Intelligence Agent runs automatically when the shipment reaches IN_TRANSIT status.
+                  Use the Re-analyze button to trigger a manual assessment.
                 </p>
               </div>
             )}
           </div>
 
-          {/* Documents */}
+          {/* ── Documents Section ─────────────────────────────────────── */}
           <div>
             <div className="flex items-center gap-2 mb-3">
               <FileText className="w-4 h-4 text-slate-400" />
@@ -296,7 +552,7 @@ export default function AdminPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-slate-100">Admin Panel</h1>
-            <p className="text-xs text-slate-500">Manage all shipments, documents, and compliance</p>
+            <p className="text-xs text-slate-500">Manage shipments · AI Risk Intelligence · Compliance</p>
           </div>
         </div>
 
@@ -456,7 +712,7 @@ export default function AdminPage() {
         )}
       </div>
 
-      {/* Document + Compliance Drawer */}
+      {/* Risk Intelligence Drawer */}
       {selectedShipment && (
         <DocumentDrawer
           shipment={selectedShipment}

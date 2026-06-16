@@ -141,31 +141,56 @@ model Notification {
 // back to core-service during the agent run.
 
 model ComplianceReport {
-  id          String             @id @default(uuid())
-  shipmentId  String             @unique  // one report per shipment
-  shipment    Shipment           @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
-  status      ComplianceStatus   @default(PENDING)
-  // Human-readable summary written by the Bedrock agent
-  summary     String?
-  // Bedrock-assigned run identifier for traceability
-  agentRunId  String?
-  findings    ComplianceFinding[]
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  id                     String             @id @default(uuid())
+  shipmentId             String             @unique  // one report per shipment
+  shipment               Shipment           @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  status                 ComplianceStatus   @default(PENDING)
+  // Legacy one-line summary (kept for backward compat)
+  summary                String?
+  // ── Risk Intelligence fields (v3.1) ──────────────────────────────────────
+  // Continuous risk score 0.0 (no risk) → 1.0 (critical risk)
+  overallRiskScore       Float?
+  // Categorical risk level derived from overallRiskScore + findings
+  riskLevel              String?            // LOW | MEDIUM | HIGH | CRITICAL
+  // Multi-paragraph executive narrative written by the LLM
+  executiveSummary       String?
+  // Operational recommendation for the compliance team
+  recommendedDisposition String?
+  // Which Bedrock model produced this report
+  modelId                String?
+  // Model's stated overall confidence in the assessment
+  modelConfidence        Float?
+  // End-to-end processing time (ms) for this agent run
+  processingTimeMs       Int?
+  // ─────────────────────────────────────────────────────────────────────────
+  agentRunId             String?
+  findings               ComplianceFinding[]
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
 }
 
 model ComplianceFinding {
-  id          String             @id @default(uuid())
-  reportId    String
-  report      ComplianceReport   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  id                String             @id @default(uuid())
+  reportId          String
+  report            ComplianceReport   @relation(fields: [reportId], references: [id], onDelete: Cascade)
   // Optional: which document triggered this finding
-  documentId  String?
-  document    ShipmentDocument?  @relation(fields: [documentId], references: [id])
-  findingType FindingType
-  severity    ComplianceSeverity
-  description String
+  documentId        String?
+  document          ShipmentDocument?  @relation(fields: [documentId], references: [id])
+  findingType       FindingType
+  severity          ComplianceSeverity
+  description       String
   // Field-level detail: e.g. { field: "destination", expected: "NYC", found: "LAX" }
-  detail      Json?
-  resolvedAt  DateTime?
-  createdAt   DateTime           @default(now())
+  detail            Json?
+  // ── Risk Intelligence fields (v3.1) ──────────────────────────────────────
+  // Specific text from the document(s) that triggered this finding
+  evidence          String?
+  // LLM's analytical reasoning chain explaining why this is a risk
+  reasoning         String?
+  // LLM confidence in this specific finding (0.0–1.0)
+  confidenceScore   Float?
+  // Actionable recommendation for the operations/compliance team
+  recommendedAction String?
+  // ─────────────────────────────────────────────────────────────────────────
+  resolvedAt        DateTime?
+  createdAt         DateTime           @default(now())
 }

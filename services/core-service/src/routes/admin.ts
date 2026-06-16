@@ -406,7 +406,10 @@ router.get('/compliance/:shipmentId', authenticate, requireAdmin, async (req: Re
     const report = await prisma.complianceReport.findUnique({
       where: { shipmentId: req.params.shipmentId },
       include: {
-        findings: { orderBy: { severity: 'asc' } },
+        // Order CRITICAL → HIGH → MEDIUM → LOW
+        findings: {
+          orderBy: [{ severity: 'desc' }, { createdAt: 'asc' }],
+        },
       },
     });
 
@@ -415,7 +418,40 @@ router.get('/compliance/:shipmentId', authenticate, requireAdmin, async (req: Re
       return;
     }
 
-    res.json(report);
+    // Explicit response shape — includes all v3.1 risk intelligence fields
+    res.json({
+      id: report.id,
+      shipmentId: report.shipmentId,
+      status: report.status,
+      agentRunId: report.agentRunId,
+      // Legacy summary (backward compat)
+      summary: report.summary,
+      // v3.1: Risk Intelligence fields
+      overallRiskScore: report.overallRiskScore,
+      riskLevel: report.riskLevel,
+      executiveSummary: report.executiveSummary,
+      recommendedDisposition: report.recommendedDisposition,
+      modelId: report.modelId,
+      modelConfidence: report.modelConfidence,
+      processingTimeMs: report.processingTimeMs,
+      createdAt: report.createdAt,
+      updatedAt: report.updatedAt,
+      findings: report.findings.map((f) => ({
+        id: f.id,
+        findingType: f.findingType,
+        severity: f.severity,
+        description: f.description,
+        // v3.1: Risk Intelligence fields
+        evidence: f.evidence,
+        reasoning: f.reasoning,
+        confidenceScore: f.confidenceScore,
+        recommendedAction: f.recommendedAction,
+        documentId: f.documentId,
+        detail: f.detail,
+        resolvedAt: f.resolvedAt,
+        createdAt: f.createdAt,
+      })),
+    });
   } catch (error) {
     console.error('Admin compliance report error:', error);
     res.status(500).json({ error: 'Failed to fetch compliance report' });
