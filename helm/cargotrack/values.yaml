@@ -32,7 +32,6 @@ coreService:
   env:
     NODE_ENV: production
     PORT: "4000"
-    MOCK_AGENT: "true"
   ingress:
     enabled: true
     pathPrefix: "/api"

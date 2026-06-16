@@ -2,11 +2,12 @@
 # post-apply-setup.sh
 # Run this AFTER terraform apply completes to wire up Helm values with real AWS resource IDs.
 # Usage: bash scripts/post-apply-setup.sh
-# Run from: project root (c:\Users\Admin\project\terraform-project\)
+# Run from: git repo root (cargotrack-v2/)
+#   Example: cd /path/to/cargotrack-v2 && bash scripts/post-apply-setup.sh
 
 set -euo pipefail
 
-INFRA_DIR="cargotrack-v2/cargotrack-infra/environments/dev"
+INFRA_DIR="cargotrack-infra/environments/dev"
 VALUES_FILE="helm/cargotrack/values-dev.yaml"
 CLUSTER_NAME="cargotrack"
 REGION="us-east-1"

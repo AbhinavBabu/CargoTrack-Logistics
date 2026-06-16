@@ -23,12 +23,13 @@ override.tf.json
 .terraformrc
 terraform.rc
 
-# Terraform plan files
+# Terraform plan files (both with and without extension)
 *.tfplan
 *.plan
+tfplan
+tfplan*
 
-# Lock file (depends on team preference)
-# Keep this if working in a team:
+# Lock file (keep for reproducible builds)
 # !.terraform.lock.hcl
 
 # IDE files
@@ -39,9 +40,7 @@ terraform.rc
 .DS_Store
 Thumbs.db
 
-.terraform/
-*.tfvars
-*.tfvars.json
-tfplan*
-*.tfplan
-*.plan
+# Terraform state snapshot exports (should NOT be committed — use remote S3 backend)
+terraform-state.json
+terraform-state*.json
+*.tfstate.backup

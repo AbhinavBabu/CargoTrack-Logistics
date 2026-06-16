@@ -14,13 +14,6 @@ global:
 image:
   pullPolicy: Always
 
-# AI mode: keep mock=true until Bedrock access is confirmed
-# To switch to Nova: change to "false" and run: git push (ArgoCD deploys automatically)
-aiService:
-  env:
-    MOCK_AGENT: "true"
-    TEXTRACT_ENABLED: "false"
-
 # IRSA role ARNs — populated by inject-values script after terraform apply
 # DO NOT commit real ARNs — these are injected by CI/CD from terraform output
 coreService:
@@ -33,10 +26,15 @@ documentService:
   serviceAccount:
     roleArn: ""  # INJECT: terraform output irsa_document_service_role_arn
 
+# AI service: single block — env overrides + IRSA role ARN + image tag
+# MOCK_AGENT=true until Bedrock access is granted. Change to "false" then git push.
 aiService:
   tag: latest
   serviceAccount:
     roleArn: ""  # INJECT: terraform output irsa_ai_service_role_arn
+  env:
+    MOCK_AGENT: "true"
+    TEXTRACT_ENABLED: "false"
 
 frontend:
   tag: latest
