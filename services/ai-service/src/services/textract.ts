@@ -8,8 +8,20 @@ import {
 } from '@aws-sdk/client-textract';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { config } from '../config';
-import { DocumentRecord, ExtractedDocumentFields, ExtractedDocumentText } from '../agent/contracts';
+import { DocumentRecord, ExtractedDocumentText } from '../agent/contracts';
 import { DocumentType } from '@prisma/client';
+
+/**
+ * @deprecated v3.0 type — kept for backward compat with legacy extractFields() methods.
+ * The v3.1 architecture uses ExtractedDocumentText (rawText) instead.
+ * All new code should call extractText() which returns ExtractedDocumentText.
+ */
+interface ExtractedDocumentFields {
+  documentId: string;
+  documentType: DocumentType;
+  fields: Record<string, string>;
+  confidence: number;
+}
 
 // ─── Textract Service ─────────────────────────────────────────────────────────
 //
@@ -466,10 +478,6 @@ export class TextractService {
   // ── Mock text extraction (v3.1) ─────────────────────────────────────────────
 
   private mockExtractText(doc: DocumentRecord): ExtractedDocumentText {
-    // Import mock extractor's realistic text
-    const { mockExtractor } = require('../extractor/mock-extractor');
-    // Run synchronously by delegating to async method via immediate resolution
-    // (mock returns synchronously in practice)
     console.log(`[textract][MOCK] Returning mock document text for ${doc.documentType} (doc: ${doc.id})`);
     // Produce inline mock text consistent with the mock extractor
     const mockTexts: Record<string, string> = {

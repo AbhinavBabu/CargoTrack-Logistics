@@ -21,6 +21,7 @@ import {
   ConverseCommand,
   type Message,
   type ContentBlock,
+  type Tool,
   type ToolResultContentBlock,
 } from '@aws-sdk/client-bedrock-runtime';
 import { randomUUID } from 'crypto';
@@ -233,7 +234,7 @@ Begin by retrieving the shipment profile and uploaded documents. Then get the ro
         system: [{ text: SYSTEM_PROMPT }],
         messages,
         toolConfig: {
-          tools: COMPLIANCE_AGENT_TOOLS.map((t) => ({ toolSpec: t })),
+          tools: COMPLIANCE_AGENT_TOOLS.map((t) => ({ toolSpec: t })) as Tool[],
         },
         inferenceConfig: {
           maxTokens: 8192,
@@ -303,7 +304,7 @@ Begin by retrieving the shipment profile and uploaded documents. Then get the ro
 
         const toolResultContent: ToolResultContentBlock = {
           json: result as Record<string, unknown>,
-        };
+        } as ToolResultContentBlock;
 
         toolResults.push({
           toolResult: {

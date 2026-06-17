@@ -19,7 +19,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { agentTools } from '../agent/tools';
-import { CopilotEngine } from './engine';
+import { CopilotEngine } from '../copilot/engine';
 import { config } from '../config';
 
 const router = Router();

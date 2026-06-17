@@ -98,7 +98,7 @@ function toBedrockMessage(msg: LLMMessage): BedrockMessage {
           toolUseId: tr.toolCallId,
           content: [{ json: tr.content as Record<string, unknown> } as ToolResultContentBlock],
         },
-      }));
+      })) as ContentBlock[];
       return { role: 'user', content };
     }
     return { role: 'user', content: [{ text: msg.text ?? '' }] };
@@ -108,7 +108,7 @@ function toBedrockMessage(msg: LLMMessage): BedrockMessage {
   if (msg.toolCalls && msg.toolCalls.length > 0) {
     const content: ContentBlock[] = msg.toolCalls.map((tc) => ({
       toolUse: { toolUseId: tc.id, name: tc.name, input: tc.input },
-    }));
+    })) as ContentBlock[];
     if (msg.text) content.unshift({ text: msg.text });
     return { role: 'assistant', content };
   }
