@@ -354,4 +354,186 @@ export class AgentTools implements AgentDataAccess {
       console.warn('[AgentTools] Failed to publish audit event to DynamoDB:', err);
     }
   }
+
+  // ─── Copilot: full report + findings (read-only) ──────────────────────────
+  //
+  // Used by the Copilot Engine to build context for explain-risk,
+  // recommendations, and Q&A capabilities.
+
+  async getExistingReport(shipmentId: string): Promise<{
+    id: string;
+    status: string;
+    summary: string | null;
+    executiveSummary: string | null;
+    overallRiskScore: number | null;
+    riskLevel: string | null;
+    recommendedDisposition: string | null;
+    modelId: string | null;
+    processingTimeMs: number | null;
+    findings: Array<{
+      id: string;
+      findingType: string;
+      severity: string;
+      description: string;
+      evidence: string | null;
+      reasoning: string | null;
+      confidenceScore: number | null;
+      recommendedAction: string | null;
+    }>;
+  } | null> {
+    const report = await this.prisma.complianceReport.findUnique({
+      where: { shipmentId },
+      include: {
+        findings: {
+          orderBy: [{ severity: 'desc' }, { createdAt: 'asc' }],
+          select: {
+            id: true,
+            findingType: true,
+            severity: true,
+            description: true,
+            evidence: true,
+            reasoning: true,
+            confidenceScore: true,
+            recommendedAction: true,
+          },
+        },
+      },
+    });
+
+    if (!report) return null;
+
+    return {
+      id: report.id,
+      status: report.status,
+      summary: report.summary,
+      executiveSummary: report.executiveSummary,
+      overallRiskScore: report.overallRiskScore,
+      riskLevel: report.riskLevel,
+      recommendedDisposition: report.recommendedDisposition,
+      modelId: report.modelId,
+      processingTimeMs: report.processingTimeMs,
+      findings: report.findings,
+    };
+  }
+
+  // ─── Copilot: tracking events (read-only) ─────────────────────────────────
+  //
+  // Used by Timeline Narrative capability to build the journey story.
+
+  async getTrackingEvents(shipmentId: string): Promise<Array<{
+    status: string;
+    location: string | null;
+    description: string;
+    timestamp: Date;
+  }>> {
+    return this.prisma.trackingEvent.findMany({
+      where: { shipmentId },
+      orderBy: { timestamp: 'asc' },
+      select: {
+        status: true,
+        location: true,
+        description: true,
+        timestamp: true,
+      },
+    });
+  }
+
+  // ─── Copilot: similar shipments (read-only, SQL-based) ───────────────────
+  //
+  // Finds historically similar shipments by matching:
+  //   1. Same shipmentType
+  //   2. Overlapping corridor (origin OR destination country/city)
+  //   3. Has a ComplianceReport (so patterns are available)
+  //
+  // Returns up to 8 similar shipments with their risk outcomes.
+  // No vector DB or embeddings required.
+
+  async getSimilarShipments(shipmentId: string): Promise<Array<{
+    trackingNumber: string;
+    origin: string;
+    destination: string;
+    shipmentType: string;
+    riskLevel: string | null;
+    status: string;
+    findingTypes: string[];
+    createdAt: Date;
+  }>> {
+    // First get the current shipment
+    const current = await this.prisma.shipment.findUnique({
+      where: { id: shipmentId },
+      select: { shipmentType: true, origin: true, destination: true },
+    });
+
+    if (!current) return [];
+
+    // Extract first word of origin/destination for corridor matching
+    // e.g. "New York, USA" → "New"... too granular; use last comma-segment
+    const originKey = current.origin.split(',').pop()?.trim() ?? current.origin;
+    const destKey = current.destination.split(',').pop()?.trim() ?? current.destination;
+
+    const similar = await this.prisma.shipment.findMany({
+      where: {
+        id: { not: shipmentId },
+        shipmentType: current.shipmentType,
+        complianceReport: { isNot: null },
+        OR: [
+          { origin: { contains: originKey, mode: 'insensitive' } },
+          { destination: { contains: destKey, mode: 'insensitive' } },
+          { origin: { contains: current.origin.split(',')[0], mode: 'insensitive' } },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 8,
+      select: {
+        trackingNumber: true,
+        origin: true,
+        destination: true,
+        shipmentType: true,
+        status: true,
+        createdAt: true,
+        complianceReport: {
+          select: {
+            riskLevel: true,
+            findings: {
+              select: { findingType: true },
+              orderBy: { severity: 'desc' },
+              take: 3,
+            },
+          },
+        },
+      },
+    });
+
+    return similar.map((s) => ({
+      trackingNumber: s.trackingNumber,
+      origin: s.origin,
+      destination: s.destination,
+      shipmentType: s.shipmentType,
+      status: s.status,
+      riskLevel: s.complianceReport?.riskLevel ?? null,
+      findingTypes: s.complianceReport?.findings.map((f) => f.findingType) ?? [],
+      createdAt: s.createdAt,
+    }));
+  }
+
+  // ─── Copilot: update executive summary (write) ────────────────────────────
+  //
+  // Allows the copilot engine to overwrite executiveSummary with a richer
+  // version after the compliance agent has written its initial summary.
+  // Only called from the auto-trigger post-compliance flow.
+
+  async updateExecutiveSummary(shipmentId: string, copilotSummary: string): Promise<void> {
+    await this.prisma.complianceReport.update({
+      where: { shipmentId },
+      data: { executiveSummary: copilotSummary },
+    });
+  }
 }
+
+// ─── Singleton ────────────────────────────────────────────────────────────────
+//
+// Single shared PrismaClient instance for the ai-service process.
+// Both the compliance runner and the copilot engine use this instance.
+
+const _prisma = new PrismaClient();
+export const agentTools = new AgentTools(_prisma);

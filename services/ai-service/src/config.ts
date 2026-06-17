@@ -21,14 +21,32 @@ export const config = {
   // SQS — compliance trigger queue (EventBridge → SQS → this service)
   sqsQueueUrl: process.env.SQS_COMPLIANCE_QUEUE_URL || '',
 
+  // ─── LLM Provider Configuration ─────────────────────────────────────────
+  // Controls which LLM backend the Copilot Engine and Compliance Runner use.
+  //
+  //   LLM_PROVIDER=bedrock   (default) — Amazon Nova via Bedrock Converse API
+  //   LLM_PROVIDER=gemini              — Google Gemini via REST API
+  //   LLM_PROVIDER=mock                — Deterministic mock (no network calls)
+  //
+  // The compliance agent runner respects MOCK_AGENT for backward compat.
+  // The copilot engine reads llmProvider for provider selection.
+  llmProvider: process.env.LLM_PROVIDER ||
+    (process.env.MOCK_AGENT === 'true' || !process.env.AWS_DEFAULT_REGION ? 'mock' : 'bedrock'),
+
   // Bedrock — model ID.
   // Amazon Nova models use the Converse API, which is also compatible
   // with Claude models. Switch by changing BEDROCK_MODEL_ID env var only.
   // Supported:
-  //   Nova Pro:   amazon.nova-pro-v1:0
-  //   Nova Lite:  amazon.nova-lite-v1:0
+  //   Nova Lite: amazon.nova-lite-v1:0  (default — fast, cost-efficient)
+  //   Nova Pro:  amazon.nova-pro-v1:0   (higher reasoning capability)
   //   Claude 3.5: anthropic.claude-3-5-sonnet-20241022-v2:0
-  bedrockModelId: process.env.BEDROCK_MODEL_ID || 'amazon.nova-pro-v1:0',
+  bedrockModelId: process.env.BEDROCK_MODEL_ID || 'amazon.nova-lite-v1:0',
+
+  // Gemini — fallback provider
+  // Requires: GEMINI_API_KEY set in environment
+  // Model default: gemini-2.0-flash-lite (fast, free tier available)
+  geminiApiKey: process.env.GEMINI_API_KEY || '',
+  geminiModelId: process.env.GEMINI_MODEL_ID || 'gemini-2.0-flash-lite',
 
   // S3 — for fetching document files for Textract
   s3Bucket: process.env.S3_BUCKET || '',
@@ -44,6 +62,7 @@ export const config = {
 
   // Whether to skip real Bedrock calls (use mock agent runner).
   // Automatically true if AWS_DEFAULT_REGION is not set.
+  // NOTE: The Copilot Engine reads llmProvider instead of this flag.
   mockAgent: process.env.MOCK_AGENT === 'true' || !process.env.AWS_DEFAULT_REGION,
 
   // Whether to use AWS Textract for document extraction.

@@ -3,6 +3,7 @@ import cors from 'cors';
 import { config } from './config';
 import healthRoutes from './routes/health';
 import triggerRoutes from './routes/trigger';
+import copilotRoutes from './routes/copilot';
 import { complianceHandler } from './handlers/complianceHandler';
 
 const app = express();
@@ -17,6 +18,10 @@ app.use('/api/health', healthRoutes);
 // without needing SQS/EventBridge in local dev.
 app.use('/api/compliance', triggerRoutes);
 
+// Copilot — Shipment Intelligence Copilot endpoints
+// 7 AI capabilities: summary, explain-risk, recommendations, ask, similar, timeline
+app.use('/api/copilot', copilotRoutes);
+
 // Start the SQS compliance polling loop (non-blocking)
 // In mock mode, this is a no-op.
 // In live mode, this starts polling the compliance trigger queue.
@@ -24,9 +29,10 @@ complianceHandler.start();
 
 const server = app.listen(config.port, '0.0.0.0', () => {
   console.log(`[ai-service] Running on port ${config.port} (${config.nodeEnv})`);
-  console.log(`[ai-service] Mode: ${config.mockAgent ? 'mock (no AWS)' : 'live (Bedrock)'}`);
-  console.log(`[ai-service] Model: ${config.bedrockModelId}`);
+  console.log(`[ai-service] Compliance runner: ${config.mockAgent ? 'mock' : 'live (Bedrock)'}`);
+  console.log(`[ai-service] LLM provider: ${config.llmProvider} / model: ${config.bedrockModelId}`);
   console.log(`[ai-service] SQS queue: ${config.sqsQueueUrl || '(not configured)'}`);
+  console.log(`[ai-service] Copilot capabilities: summary, explain-risk, recommendations, ask, similar, timeline`);
 });
 
 // Graceful shutdown

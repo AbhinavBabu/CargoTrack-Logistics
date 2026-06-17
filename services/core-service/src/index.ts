@@ -16,6 +16,7 @@ import trackingRoutes from './routes/tracking';
 import notificationRoutes from './routes/notifications';
 import reportRoutes from './routes/reports';
 import adminRoutes from './routes/admin';
+import copilotProxyRoutes from './routes/copilot';
 
 const prisma = new PrismaClient();
 
@@ -65,6 +66,8 @@ app.use('/api/tracking', trackingRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/admin', adminRoutes);
+// Copilot proxy — forwards authenticated requests to ai-service copilot endpoints
+app.use('/api/admin/copilot', copilotProxyRoutes);
 
 // Error handler (must be last)
 app.use(errorHandler);

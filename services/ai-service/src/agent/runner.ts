@@ -23,11 +23,11 @@ import {
   type ContentBlock,
   type ToolResultContentBlock,
 } from '@aws-sdk/client-bedrock-runtime';
-import { PrismaClient } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { config } from '../config';
 import { COMPLIANCE_AGENT_TOOLS, ComplianceTriggerMessage } from './contracts';
 import { AgentTools } from './tools';
+import { CopilotEngine } from '../copilot/engine';
 
 // ─── Bedrock client ───────────────────────────────────────────────────────────
 
@@ -667,13 +667,25 @@ async function runMockAgent(
 
 export async function runComplianceAgent(
   trigger: ComplianceTriggerMessage,
-  prisma: PrismaClient,
+  tools: AgentTools,
 ): Promise<void> {
-  const tools = new AgentTools(prisma);
-
   if (config.mockAgent || !bedrock) {
     await runMockAgent(trigger, tools);
   } else {
     await runBedrockAgent(trigger, tools);
   }
+
+  // ── Auto-trigger: Copilot Executive Summary Enrichment ──────────────────
+  // After the compliance agent finalizes, the Copilot Engine generates a
+  // richer executive summary and overwrites the compliance agent's version.
+  // Fire-and-forget — compliance result is already written and returned.
+  // Any error here is logged but does not affect the compliance outcome.
+  setImmediate(async () => {
+    try {
+      const copilot = new CopilotEngine(tools);
+      await copilot.autoEnrichExecutiveSummary(trigger.shipmentId);
+    } catch (err) {
+      console.warn(`[Runner] Copilot auto-enrichment failed (non-critical) for ${trigger.shipmentId}:`, err);
+    }
+  });
 }
