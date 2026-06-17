@@ -41,6 +41,7 @@ interface RouteCorridorEntry {
   label: string;
   from: string[];
   to: string[];
+  bidirectional?: boolean;
   sanctionsRisk: 'CRITICAL' | 'ELEVATED' | 'MEDIUM' | 'LOW';
   sanctionsNotes: string;
   customsComplexity: 'HIGH' | 'MEDIUM' | 'LOW';
@@ -237,11 +238,13 @@ export interface GroundedContext {
 // ─── Singleton Catalog Store ──────────────────────────────────────────────────
 
 class KnowledgeBaseStore {
-  private routes: RouteCatalog;
-  private dg: DGCatalog;
-  private hs: HSCatalog;
-  private incoterms: IncotermsCatalog;
-  private sanctions: SanctionsCatalog;
+  // Properties are assigned in load() before any getter is called.
+  // The ! assertion satisfies strict-mode strictPropertyInitialization.
+  private routes!: RouteCatalog;
+  private dg!: DGCatalog;
+  private hs!: HSCatalog;
+  private incoterms!: IncotermsCatalog;
+  private sanctions!: SanctionsCatalog;
   private loaded = false;
 
   load(): void {
@@ -482,7 +485,6 @@ export const KnowledgeBase = {
     const originJ      = findJurisdiction(origin);
     const destinationJ = findJurisdiction(destination);
 
-    const severityRank: Record<string, number> = { CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1, CLEAR: 0 };
 
     function toRisk(j?: SanctionsJurisdiction): 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'CLEAR' {
       if (!j) return 'CLEAR';
