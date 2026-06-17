@@ -26,6 +26,15 @@ export default function ShipmentsPage() {
       const { data } = await api.get(`/shipments?${params}`);
       return data;
     },
+    // Poll every 8 seconds while any shipment on this page is still awaiting
+    // AI risk analysis (aiRiskLevel === null). Stops automatically once all
+    // shipments have been processed. Matches the pattern in ShipmentDetailPage.
+    refetchInterval: (query) => {
+      const shipments = (query.state.data as PaginatedResponse<Shipment> | undefined)?.data;
+      if (!shipments || shipments.length === 0) return false;
+      const anyPending = shipments.some((s) => !s.aiRiskLevel);
+      return anyPending ? 8000 : false;
+    },
   });
 
   const handleSearch = () => {

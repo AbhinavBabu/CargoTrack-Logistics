@@ -16,6 +16,13 @@ COPY src ./src
 
 RUN npm run build
 
+# ── Copy knowledge base catalogs into dist ──────────────────────────────────
+# tsc only emits compiled .js files — JSON catalog files must be copied
+# explicitly. Without this step, KnowledgeBase.initialize() fails with ENOENT
+# and every shipment silently falls back to INTERNATIONAL-GENERIC risk scoring.
+RUN mkdir -p dist/knowledge/catalogs
+COPY src/knowledge/catalogs/ dist/knowledge/catalogs/
+
 EXPOSE 4002
 
 COPY entrypoint.sh ./

@@ -17,8 +17,16 @@ const CATALOG_DIR = path.join(__dirname, 'catalogs');
 
 function loadCatalog<T>(filename: string): T {
   const filePath = path.join(CATALOG_DIR, filename);
-  const raw = fs.readFileSync(filePath, 'utf-8');
-  return JSON.parse(raw) as T;
+  try {
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    return JSON.parse(raw) as T;
+  } catch (err) {
+    throw new Error(
+      `[KnowledgeBase] Cannot read catalog "${filename}" at "${filePath}". ` +
+      `Ensure the Docker image includes COPY src/knowledge/catalogs/ dist/knowledge/catalogs/. ` +
+      `Original error: ${(err as Error).message}`
+    );
+  }
 }
 
 // ─── Catalog types (minimal — sufficient for prompt injection) ─────────────────
@@ -249,6 +257,7 @@ class KnowledgeBaseStore {
 
   load(): void {
     if (this.loaded) return;
+    console.log(`[KnowledgeBase] Loading catalogs from: ${CATALOG_DIR}`);
     try {
       this.routes     = loadCatalog<RouteCatalog>('route-intelligence.json');
       this.dg         = loadCatalog<DGCatalog>('dangerous-goods.json');
@@ -256,17 +265,19 @@ class KnowledgeBaseStore {
       this.incoterms  = loadCatalog<IncotermsCatalog>('incoterms-intelligence.json');
       this.sanctions  = loadCatalog<SanctionsCatalog>('sanctions-watch.json');
       this.loaded = true;
-      console.log('[KnowledgeBase] Catalogs loaded successfully:', {
-        routes: this.routes.corridors.length,
-        dgClasses: this.dg.classes.length,
-        hsChapters: this.hs.chapters.length,
-        incoterms: this.incoterms.terms.length,
-        sanctionsJurisdictions: this.sanctions.jurisdictions.length,
+      console.log('[KnowledgeBase] ✓ All catalogs loaded:', {
+        catalogDir:               CATALOG_DIR,
+        routes:                   this.routes.corridors.length,
+        dgClasses:                this.dg.classes.length,
+        hsChapters:               this.hs.chapters.length,
+        incoterms:                this.incoterms.terms.length,
+        sanctionsJurisdictions:   this.sanctions.jurisdictions.length,
         catalogVersion: `routes:${this.routes._catalog.version} dg:${this.dg._catalog.version} hs:${this.hs._catalog.version}`,
       });
     } catch (err) {
-      console.error('[KnowledgeBase] Failed to load catalogs:', err);
-      // Do NOT throw — fall back gracefully so AI service still starts
+      console.error('[KnowledgeBase] ✗ FAILED to load catalogs — AI will use INTERNATIONAL-GENERIC fallback for all shipments:');
+      console.error((err as Error).message);
+      // Do NOT throw — service still starts; routes degrade gracefully
     }
   }
 
