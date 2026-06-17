@@ -1,0 +1,259 @@
+{
+  "_catalog": {
+    "name": "CargoTrack Dangerous Goods Intelligence Catalog",
+    "version": "1.0.0",
+    "effectiveDate": "2024-01-01",
+    "sources": [
+      "IATA Dangerous Goods Regulations (DGR) 65th Edition",
+      "IMDG Code (Amendment 41-22)",
+      "ADR 2023 (European Agreement concerning the International Carriage of Dangerous Goods by Road)",
+      "ICAO Technical Instructions for the Safe Transport of Dangerous Goods by Air",
+      "UN Model Regulations on the Transport of Dangerous Goods (23rd revised edition)"
+    ],
+    "disclaimer": "This catalog is for risk screening and awareness purposes. Always consult the current edition of applicable regulations (IATA DGR, IMDG Code, ADR) before shipping dangerous goods. Regulations change annually."
+  },
+  "classes": [
+    {
+      "class": "1",
+      "label": "Explosives",
+      "subclasses": ["1.1 Mass explosion hazard", "1.2 Projection hazard", "1.3 Fire/explosion/projection hazard", "1.4 Slight explosion hazard", "1.5 Very insensitive blasting agents", "1.6 Extremely insensitive articles"],
+      "iataLabel": "Class 1 — Explosives",
+      "imdgLabel": "Class 1 — Explosives",
+      "commonHsChapters": ["36"],
+      "commonHsCodes": ["3601", "3602", "3603", "3604", "3605", "3606"],
+      "commonExamples": ["Fireworks", "Ammunition", "Detonators", "Blasting agents", "Airbag inflators", "Pyrotechnic articles"],
+      "keywordTriggers": ["explosive", "fireworks", "pyrotechnic", "ammunition", "munitions", "detonator", "airbag inflator", "blasting"],
+      "requiredDocuments": [
+        "Shipper's Declaration for Dangerous Goods (ICAO/IATA format)",
+        "Competent Authority Approval (for specific divisions)",
+        "Compatibility Certificate",
+        "UN Number and Proper Shipping Name on outer packaging"
+      ],
+      "airFreightStatus": "FORBIDDEN",
+      "airFreightNotes": "Class 1 Explosives (most divisions) FORBIDDEN on passenger and cargo aircraft. 1.4S limited exceptions exist.",
+      "seaFreightNotes": "IMDG Class 1. Strict stowage and segregation requirements. Advance notification to port authority required.",
+      "roadFreightNotes": "ADR Class 1. Tunnel restrictions apply. Distance from populated areas regulations.",
+      "packagingRequirements": "UN-approved packaging mandatory. Strict quantity limits per package. Compatibility between different subdivisions must be verified.",
+      "screeningNotes": "Explosives require government licenses in most jurisdictions. High diversion risk. Extra due diligence on end-user required.",
+      "severity": "CRITICAL"
+    },
+    {
+      "class": "2",
+      "label": "Gases",
+      "subclasses": ["2.1 Flammable gases", "2.2 Non-flammable, non-toxic gases", "2.3 Toxic gases"],
+      "iataLabel": "Class 2 — Gases",
+      "imdgLabel": "Class 2 — Gases",
+      "commonHsChapters": ["28"],
+      "commonHsCodes": ["2804", "2811", "2814", "2827"],
+      "commonExamples": ["LPG", "Acetylene", "Chlorine", "Ammonia", "Compressed oxygen", "Aerosols", "Lighters (butane)", "Dry ice", "Helium"],
+      "keywordTriggers": ["gas", "LPG", "propane", "butane", "acetylene", "chlorine", "ammonia", "aerosol", "lighter", "dry ice", "compressed"],
+      "requiredDocuments": [
+        "Shipper's Declaration for Dangerous Goods",
+        "Material Safety Data Sheet (SDS/MSDS)",
+        "Pressure Vessel Certificate (if applicable)",
+        "UN Number on packaging"
+      ],
+      "airFreightStatus": "RESTRICTED",
+      "airFreightNotes": "Class 2.1 Flammable gases: most FORBIDDEN by air. 2.2 Non-flammable gases: allowed with restrictions. 2.3 Toxic gases: FORBIDDEN on passenger aircraft.",
+      "seaFreightNotes": "IMDG Class 2. Closed cargo areas required for flammable gases. Temperature control for some.",
+      "roadFreightNotes": "ADR Class 2. Specific tank requirements for pressurized gases.",
+      "packagingRequirements": "Pressure-rated cylinders or tanks. UN-certified packaging. Valves must be protected.",
+      "screeningNotes": "Toxic gases (2.3) require special carrier approval and government permits in many jurisdictions.",
+      "severity": "HIGH"
+    },
+    {
+      "class": "3",
+      "label": "Flammable Liquids",
+      "subclasses": [],
+      "iataLabel": "Class 3 — Flammable Liquids",
+      "imdgLabel": "Class 3 — Flammable Liquids",
+      "commonHsChapters": ["27", "29", "32", "33", "38"],
+      "commonHsCodes": ["2710", "2909", "3208", "3301", "3814", "3820"],
+      "commonExamples": ["Petroleum products", "Fuel", "Paint and varnish", "Solvents", "Adhesives", "Perfume", "Nail polish", "Alcohol (high proof)", "Hand sanitizer (alcohol-based)"],
+      "keywordTriggers": ["flammable", "fuel", "petrol", "diesel", "paint", "solvent", "adhesive", "lacquer", "varnish", "perfume", "alcohol", "hand sanitizer"],
+      "requiredDocuments": [
+        "Shipper's Declaration for Dangerous Goods",
+        "Material Safety Data Sheet (SDS)",
+        "Flash Point documentation",
+        "UN Number and Packing Group on label"
+      ],
+      "airFreightStatus": "RESTRICTED",
+      "airFreightNotes": "Class 3 Packing Group I (PG I — very high danger): FORBIDDEN on passenger aircraft. PG II/III: allowed with quantity limits. Some articles (perfumes <2L) permitted as consumer commodities.",
+      "seaFreightNotes": "IMDG Class 3. Stowage categories A-D depending on flash point and packing group.",
+      "roadFreightNotes": "ADR Class 3. Tank or packaged. Specific vehicle requirements for bulk.",
+      "packagingRequirements": "UN-certified containers. Packing Group determines performance level required. Maximum quantity limits per package.",
+      "screeningNotes": "Very common. Risk screening should focus on quantity (bulk shipments indicate industrial rather than consumer use), flash point, and packing group.",
+      "severity": "MEDIUM"
+    },
+    {
+      "class": "4",
+      "label": "Flammable Solids",
+      "subclasses": ["4.1 Flammable solids, self-reactive substances, desensitized explosives", "4.2 Self-heating/spontaneously combustible substances", "4.3 Substances which emit flammable gases on contact with water"],
+      "iataLabel": "Class 4 — Flammable Solids",
+      "imdgLabel": "Class 4 — Flammable Solids",
+      "commonHsChapters": ["28", "29"],
+      "commonHsCodes": ["2804", "2813", "2850"],
+      "commonExamples": ["Matches", "Sodium", "Potassium", "Calcium carbide", "Metal powders", "Charcoal (self-heating)", "Fish meal (in bulk)"],
+      "keywordTriggers": ["matches", "sodium metal", "potassium", "calcium carbide", "metal powder", "fish meal", "charcoal bulk", "self-heating"],
+      "requiredDocuments": [
+        "Shipper's Declaration for Dangerous Goods",
+        "Material Safety Data Sheet (SDS)",
+        "Self-Heating Test Results (if applicable)",
+        "UN Number and class label"
+      ],
+      "airFreightStatus": "RESTRICTED",
+      "airFreightNotes": "Class 4.1: many restricted by air; self-reactive substances (4.1 Type B and above) often FORBIDDEN. Class 4.2: most FORBIDDEN by passenger aircraft. Class 4.3: restrictions vary.",
+      "seaFreightNotes": "IMDG Class 4. Water-reactive substances require dry stowage.",
+      "roadFreightNotes": "ADR Class 4. Special handling for water-reactive materials.",
+      "packagingRequirements": "UN-certified. Inner packaging required for water-reactive substances. No moisture exposure.",
+      "screeningNotes": "Class 4.3 (water-reactive) particularly hazardous — look for sodium, lithium, calcium carbide in descriptions.",
+      "severity": "HIGH"
+    },
+    {
+      "class": "5",
+      "label": "Oxidizing Substances and Organic Peroxides",
+      "subclasses": ["5.1 Oxidizing substances", "5.2 Organic peroxides"],
+      "iataLabel": "Class 5 — Oxidizing Substances and Organic Peroxides",
+      "imdgLabel": "Class 5 — Oxidizing Substances and Organic Peroxides",
+      "commonHsChapters": ["28", "29"],
+      "commonHsCodes": ["2814", "2815", "2842"],
+      "commonExamples": ["Hydrogen peroxide (>8%)", "Ammonium nitrate", "Swimming pool chemicals (chlorine)", "Fertilizers (ammonium nitrate)", "Organic peroxides (industrial hardeners)"],
+      "keywordTriggers": ["hydrogen peroxide", "ammonium nitrate", "fertilizer", "oxidizer", "chlorine tablet", "organic peroxide", "pool chemical"],
+      "requiredDocuments": [
+        "Shipper's Declaration for Dangerous Goods",
+        "Material Safety Data Sheet (SDS)",
+        "Control/Emergency Temperature documentation (organic peroxides)",
+        "UN Number and class label"
+      ],
+      "airFreightStatus": "RESTRICTED",
+      "airFreightNotes": "Ammonium nitrate: FORBIDDEN by air. Organic peroxides (5.2 Type A-B): FORBIDDEN by air. Types C-F: restricted.",
+      "seaFreightNotes": "IMDG Class 5. Ammonium nitrate: special stowage away from heat sources. Segregation from flammables.",
+      "roadFreightNotes": "ADR Class 5. Ammonium nitrate fertilizer has specific ADR regulations.",
+      "packagingRequirements": "UN-certified. Organic peroxides require temperature control during transport.",
+      "screeningNotes": "High dual-use risk for ammonium nitrate (fertilizer/explosive). IED precursor. Enhanced due diligence on buyer.",
+      "severity": "HIGH"
+    },
+    {
+      "class": "6",
+      "label": "Toxic and Infectious Substances",
+      "subclasses": ["6.1 Toxic substances", "6.2 Infectious substances"],
+      "iataLabel": "Class 6 — Toxic and Infectious Substances",
+      "imdgLabel": "Class 6 — Toxic and Infectious Substances",
+      "commonHsChapters": ["28", "29", "30", "38"],
+      "commonHsCodes": ["2804", "2837", "3002", "3826"],
+      "commonExamples": ["Pesticides", "Cyanide compounds", "Arsenic", "Medical/clinical waste", "Biological specimens (Category A/B)", "Dry ice with specimens", "Diagnostic specimens"],
+      "keywordTriggers": ["toxic", "poison", "pesticide", "cyanide", "arsenic", "biological", "infectious", "clinical waste", "specimen", "diagnostic"],
+      "requiredDocuments": [
+        "Shipper's Declaration for Dangerous Goods",
+        "Material Safety Data Sheet (SDS)",
+        "Permis d'importation (for Category A infectious substances in some countries)",
+        "P650 packaging certification (for infectious substances)",
+        "UN Number (UN2814 Cat A, UN3373 Cat B)"
+      ],
+      "airFreightStatus": "RESTRICTED",
+      "airFreightNotes": "Category A Infectious Substances (UN2814/UN2900): allowed with strict P602 packaging. Category B (UN3373): P650 packaging. Toxic substances: restrictions vary by toxicity.",
+      "seaFreightNotes": "IMDG Class 6. Category A: closed containers. Segregation from food and feed.",
+      "roadFreightNotes": "ADR Class 6. Category A: specialized transport with biohazard placarding.",
+      "packagingRequirements": "Infectious substances: triple packaging (primary, secondary, rigid outer). Primary must be leak-proof.",
+      "screeningNotes": "Biological Category A substances require prior government authorization in most countries. Cyanide compounds have dual-use and diversion risk.",
+      "severity": "HIGH"
+    },
+    {
+      "class": "7",
+      "label": "Radioactive Material",
+      "subclasses": ["Category I-White", "Category II-Yellow", "Category III-Yellow", "Fissile material"],
+      "iataLabel": "Class 7 — Radioactive Material",
+      "imdgLabel": "Class 7 — Radioactive Material",
+      "commonHsChapters": ["28"],
+      "commonHsCodes": ["2844", "2845"],
+      "commonExamples": ["Medical isotopes (Tc-99m, I-131)", "Industrial radiography sources", "Nuclear fuel elements", "Smoke detectors (Am-241, small quantities)", "Scientific/research isotopes"],
+      "keywordTriggers": ["radioactive", "isotope", "nuclear", "radiation", "radiography source", "smoke detector isotope", "fissile"],
+      "requiredDocuments": [
+        "Shipper's Declaration for Dangerous Goods",
+        "Competent Authority Approval (for Type B and C packages, fissile material)",
+        "Radiation Safety Certificate",
+        "Transport Index (TI) documentation",
+        "Criticality Safety Index (CSI) for fissile material",
+        "Multilateral or bilateral government approval as required"
+      ],
+      "airFreightStatus": "RESTRICTED",
+      "airFreightNotes": "Radioactive material: allowed by air with strict conditions. Fissile material requires Competent Authority Approval. High TI materials require exclusive use of aircraft.",
+      "seaFreightNotes": "IMDG Class 7. Advance notification to port required. Vessel master notification mandatory.",
+      "roadFreightNotes": "ADR Class 7. Route planning required. Escort may be required for high-activity sources.",
+      "packagingRequirements": "UN-certified Type A, B, or C packages (activity-dependent). Radiation shielding integral to package design.",
+      "screeningNotes": "HIGHEST RISK — dual-use and WMD concern. Government authorization mandatory. Screen against nuclear proliferators. Any irregularity must be escalated.",
+      "severity": "CRITICAL"
+    },
+    {
+      "class": "8",
+      "label": "Corrosive Substances",
+      "subclasses": [],
+      "iataLabel": "Class 8 — Corrosive Substances",
+      "imdgLabel": "Class 8 — Corrosive Substances",
+      "commonHsChapters": ["28", "29", "34"],
+      "commonHsCodes": ["2806", "2807", "2815", "2903"],
+      "commonExamples": ["Sulphuric acid (battery acid)", "Hydrochloric acid", "Nitric acid", "Sodium hydroxide (caustic soda)", "Battery (wet/non-spillable)", "Mercury", "Rust removers", "Toilet cleaners (strong acid/base)"],
+      "keywordTriggers": ["acid", "caustic", "corrosive", "sulphuric", "hydrochloric", "nitric", "sodium hydroxide", "battery acid", "mercury", "rust remover"],
+      "requiredDocuments": [
+        "Shipper's Declaration for Dangerous Goods",
+        "Material Safety Data Sheet (SDS)",
+        "UN Number and Packing Group on label"
+      ],
+      "airFreightStatus": "RESTRICTED",
+      "airFreightNotes": "Strong acids and alkalis restricted; PG I FORBIDDEN on passenger aircraft. Batteries (wet): FORBIDDEN on passenger aircraft cargo hold. Certain quantities allowed as carry-on.",
+      "seaFreightNotes": "IMDG Class 8. Segregation from foodstuffs, animal feeding stuffs. Acid/alkali segregation.",
+      "roadFreightNotes": "ADR Class 8. Chemical-resistant tanks for bulk.",
+      "packagingRequirements": "Chemical-resistant inner packaging. Absorbent material in outer packaging for liquids. Tightly closed to prevent leakage.",
+      "screeningNotes": "Nitric acid is an explosive precursor — dual-use concern. Mercury restricted or banned for import in many jurisdictions (Minamata Convention).",
+      "severity": "MEDIUM"
+    },
+    {
+      "class": "9",
+      "label": "Miscellaneous Dangerous Goods",
+      "subclasses": ["9A Lithium batteries", "9B Dry ice", "9C Magnetized materials", "9D Elevated temperature materials", "9E Environmentally hazardous substances"],
+      "iataLabel": "Class 9 — Miscellaneous Dangerous Goods",
+      "imdgLabel": "Class 9 — Miscellaneous Dangerous Goods",
+      "commonHsChapters": ["28", "85"],
+      "commonHsCodes": ["2804", "8506", "8507"],
+      "commonExamples": ["Lithium-ion batteries (phones, laptops, EVs)", "Lithium metal batteries", "Dry ice", "Asbestos", "Magnetized materials", "Environmentally hazardous substances", "Elevated temperature goods", "Internal combustion engines"],
+      "keywordTriggers": ["lithium battery", "lithium ion", "li-ion", "dry ice", "asbestos", "magnet", "battery", "electric vehicle", "EV", "powerbank", "power bank"],
+      "requiredDocuments": [
+        "Shipper's Declaration for Dangerous Goods (lithium batteries exceeding limits)",
+        "State of Charge documentation (lithium batteries must be ≤30% SOC for damaged/defective)",
+        "UN 38.3 Test Summary (lithium batteries)",
+        "Quantity limits per package compliance documentation"
+      ],
+      "airFreightStatus": "RESTRICTED",
+      "airFreightNotes": "Lithium-ion batteries (UN3480): FORBIDDEN on passenger aircraft as cargo if standalone cells >160 Wh or >2 batteries. Equipment-installed batteries: restricted. Spare batteries: strict limits in carry-on. EV lithium batteries: complex separate rules.",
+      "seaFreightNotes": "IMDG Class 9. Lithium batteries require special stowage. Asbestos: strictly controlled — most types banned for import in EU, UK, Australia.",
+      "roadFreightNotes": "ADR Class 9. Lithium batteries: placarding and documentation required for large quantities.",
+      "packagingRequirements": "Lithium batteries: cells protected against short circuit, inner packaging, quantity limits per package. State of charge ≤30% for recalled/damaged.",
+      "screeningNotes": "Lithium batteries are the most common DG compliance issue in air freight. Undeclared batteries in electronics shipments is a frequent violation. Check all electronics shipments.",
+      "severity": "MEDIUM",
+      "lithiumBatteryDetail": {
+        "typesCovered": ["UN3480 Lithium ion batteries", "UN3481 Lithium ion batteries in equipment", "UN3090 Lithium metal batteries", "UN3091 Lithium metal batteries in equipment"],
+        "keyLimits": {
+          "cellCapacity_Wh": "Cells >20 Wh or batteries >100 Wh require Section II declarations. Cells >60 Wh or batteries >300 Wh may require Section I.",
+          "SOC_regulation": "State of charge must not exceed 30% for damaged/defective cells. Standard shipment: ≤30% SOC recommended for air.",
+          "passengerAircraftLimit": "Standalone lithium-ion cells >160 Wh or batteries >2 per package: FORBIDDEN on passenger aircraft cargo"
+        }
+      }
+    }
+  ],
+  "hsCodeDGMapping": {
+    "27": "Class 3 (Flammable Liquids — petroleum products), Class 2 (gases)",
+    "28": "Class 2, 5, 6, 7, 8 (inorganic chemicals — acids, gases, radioactive, toxic)",
+    "29": "Class 3, 6, 8 (organic chemicals — solvents, toxic compounds, corrosives)",
+    "30": "Class 6 (pharmaceuticals — may include biologics Category A/B)",
+    "31": "Class 5.1 (fertilizers — ammonium nitrate dual-use explosive precursor)",
+    "32": "Class 3 (paints, varnishes, inks — solvents)",
+    "33": "Class 3 (essential oils, perfumes — flammable liquids)",
+    "36": "Class 1 (explosives, fireworks, matches)",
+    "38": "Class 3, 6, 8, 9 (miscellaneous chemicals)",
+    "39": "Class 3 (polymers in primary forms — some flammable)",
+    "71": "Class 7 (radioactive isotopes — precious metals sector may include pitchblende/uranium minerals)",
+    "85": "Class 9 (lithium batteries in electronics)",
+    "87": "Class 3, 9 (vehicles — fuel tanks, lithium batteries in EVs)",
+    "90": "Class 6, 7 (medical devices — may include radioactive sources, biological)"
+  }
+}

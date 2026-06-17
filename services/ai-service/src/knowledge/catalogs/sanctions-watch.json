@@ -1,0 +1,460 @@
+{
+  "_catalog": {
+    "name": "CargoTrack Sanctions Watch Catalog",
+    "version": "1.0.0",
+    "effectiveDate": "2024-01-01",
+    "sources": [
+      "U.S. Office of Foreign Assets Control (OFAC) — Sanctions Programs and Country Information",
+      "U.S. Bureau of Industry and Security (BIS) — Country Chart (EAR Supplement No. 1 to Part 738)",
+      "EU Consolidated List of Persons, Groups and Entities Subject to EU Financial Sanctions",
+      "UN Security Council Consolidated Sanctions List",
+      "UK OFSI (Office of Financial Sanctions Implementation) Consolidated List",
+      "Financial Action Task Force (FATF) — High-Risk Jurisdictions and Jurisdictions Under Increased Monitoring"
+    ],
+    "mandatoryScreeningLists": [
+      {
+        "listName": "OFAC SDN List",
+        "authority": "U.S. Treasury OFAC",
+        "scope": "Specially Designated Nationals and Blocked Persons — U.S. persons prohibited from dealing",
+        "url": "https://home.treasury.gov/policy-issues/financial-sanctions/sdn-and-consolidated-list",
+        "screenEntities": ["Shipper", "Consignee", "Notify Party", "Freight Forwarder", "Carrier", "Bank", "Beneficial Owner"]
+      },
+      {
+        "listName": "BIS Entity List",
+        "authority": "U.S. BIS",
+        "scope": "Entities requiring BIS license for export/reexport of items subject to EAR",
+        "url": "https://www.bis.doc.gov/index.php/policy-guidance/lists-of-parties-of-concern",
+        "screenEntities": ["Buyer", "Consignee", "End User", "Intermediate Consignee"]
+      },
+      {
+        "listName": "BIS Denied Persons List",
+        "authority": "U.S. BIS",
+        "scope": "Persons denied export privileges — no exports to these parties",
+        "screenEntities": ["All parties"]
+      },
+      {
+        "listName": "EU Consolidated Sanctions List",
+        "authority": "European Commission",
+        "scope": "Persons, groups, entities subject to EU financial sanctions and asset freezes",
+        "url": "https://www.sanctionsmap.eu",
+        "screenEntities": ["All parties"]
+      },
+      {
+        "listName": "UN Consolidated Sanctions List",
+        "authority": "UN Security Council",
+        "scope": "Global mandatory sanctions — all UN member states must implement",
+        "url": "https://www.un.org/securitycouncil/content/un-sc-consolidated-list",
+        "screenEntities": ["All parties"]
+      },
+      {
+        "listName": "UK OFSI Consolidated List",
+        "authority": "UK HM Treasury OFSI",
+        "scope": "UK financial sanctions — mandatory for UK persons and UK-nexus transactions",
+        "screenEntities": ["All parties"]
+      }
+    ],
+    "disclaimer": "This catalog reflects sanctions programs as of the effective date. Sanctions change frequently — sometimes daily. Always verify against current official sanctions lists before processing any transaction involving flagged jurisdictions. This catalog is for risk-awareness and screening-trigger purposes only."
+  },
+  "jurisdictions": [
+    {
+      "jurisdiction": "Russia",
+      "isoCode": "RU",
+      "sanctionsLevel": "COMPREHENSIVE",
+      "sanctioningBodies": ["OFAC", "EU (14 packages)", "UK OFSI", "G7", "Australia", "Canada", "Japan", "Switzerland"],
+      "triggerKeywords": ["Russia", "Russian", "Russian Federation", "Moscow", "Saint Petersburg", "Gazprom", "Rosneft", "Sberbank", "VTB", "RUSAL", "Aeroflot"],
+      "keyRestrictions": [
+        "Most goods prohibited for export from US/EU/UK to Russia",
+        "Financial transactions with Russian entities severely restricted",
+        "SWIFT disconnection for major Russian banks",
+        "Oil price cap: crude ≤$60/barrel, petroleum products ≤$45-100/barrel (G7)",
+        "Aviation: no EU/US aircraft sales/leasing to Russia; EU/UK airspace closed",
+        "Steel, coal, seaborne oil import from Russia banned in EU",
+        "Maritime: insurance/reinsurance for Russia-destined ships restricted"
+      ],
+      "allowedExceptions": [
+        "Food and agricultural commodities (OFAC General Licenses 4, 6B)",
+        "Medicine and medical devices (OFAC General Licenses 4, 6B)",
+        "Energy: certain energy-related transactions authorized (General License 8C, transitional)",
+        "Personal remittances: limited"
+      ],
+      "screeningRequired": ["Shipper", "Consignee", "Notify Party", "Freight Forwarder", "Carrier (flag/owner)", "Banks", "Beneficial Owner", "End User"],
+      "redFlags": [
+        "Shipments routing through Belarus, Turkey, Kazakhstan, UAE, Armenia, Georgia — common circumvention routes",
+        "Shipping goods on Russia's shadow/dark fleet vessels",
+        "Any connection to listed Russian oligarchs or their family members",
+        "Goods with no commercial purpose for stated destination",
+        "Shell company intermediaries in non-sanctioned countries"
+      ],
+      "antiCircumventionNote": "EU, UK, US, and G7 actively enforce anti-circumvention rules. Third-country companies facilitating Russia sanctions evasion face secondary sanctions and enforcement action.",
+      "severity": "CRITICAL"
+    },
+    {
+      "jurisdiction": "Iran",
+      "isoCode": "IR",
+      "sanctionsLevel": "COMPREHENSIVE",
+      "sanctioningBodies": ["OFAC (ITSR)", "EU", "UN", "UK OFSI"],
+      "triggerKeywords": ["Iran", "Iranian", "Tehran", "Persia", "Persian", "IRGC", "Sepah Bank", "Mahan Air", "National Iranian Oil"],
+      "keyRestrictions": [
+        "COMPREHENSIVE: Iranian Transactions and Sanctions Regulations (ITSR) prohibit virtually all transactions",
+        "U.S. persons prohibited from engaging in most transactions with Iran",
+        "No import of Iranian goods into US",
+        "Secondary sanctions: non-US persons dealing significantly with Iran face U.S. sanctions",
+        "SWIFT: Iran effectively disconnected",
+        "UN Resolution 2231: arms embargo, nuclear-related restrictions"
+      ],
+      "allowedExceptions": [
+        "Food and medicine under TSRA General License",
+        "Personal communications technology",
+        "Journalism exception",
+        "OFAC Specific License for other categories"
+      ],
+      "screeningRequired": ["All parties — zero tolerance approach"],
+      "redFlags": [
+        "UAE addresses used by Iranian companies (known hub for Iran evasion)",
+        "IRGC-affiliated entities or individuals",
+        "Persian language documentation",
+        "Goods transiting UAE, Turkey, Iraq, or Oman without clear commercial purpose",
+        "End-user refusing to provide details",
+        "Products with obvious Iranian market applications (oil equipment, aerospace parts)"
+      ],
+      "severity": "CRITICAL"
+    },
+    {
+      "jurisdiction": "North Korea",
+      "isoCode": "KP",
+      "sanctionsLevel": "COMPREHENSIVE",
+      "sanctioningBodies": ["OFAC (NKSR)", "UN (comprehensive embargo)", "EU", "UK"],
+      "triggerKeywords": ["North Korea", "DPRK", "Democratic People's Republic", "Pyongyang", "Korean People's Army", "Chosun"],
+      "keyRestrictions": [
+        "UN Security Council has imposed near-total trade embargo",
+        "U.S. NKSR: comprehensive sanctions on virtually all transactions",
+        "Virtually no authorized trade",
+        "Arms embargo: complete",
+        "Oil imports capped at 4 million barrels/year under UN resolutions"
+      ],
+      "allowedExceptions": [
+        "Humanitarian goods with UN/OFAC authorization",
+        "Diplomatic supplies"
+      ],
+      "screeningRequired": ["All parties"],
+      "redFlags": [
+        "Ship-to-ship transfers in international waters",
+        "Falsified ship positions (AIS spoofing)",
+        "Chinese intermediaries for goods with clear DPRK end-use",
+        "Any vessel known to have called at North Korean ports"
+      ],
+      "severity": "CRITICAL"
+    },
+    {
+      "jurisdiction": "Cuba",
+      "isoCode": "CU",
+      "sanctionsLevel": "COMPREHENSIVE",
+      "sanctioningBodies": ["OFAC (CACR)", "US (Cuban Assets Control Regulations)"],
+      "triggerKeywords": ["Cuba", "Cuban", "Havana", "GAESA", "CIMEX"],
+      "keyRestrictions": [
+        "U.S. persons prohibited from most transactions with Cuba",
+        "U.S. exports to Cuba severely limited",
+        "Helms-Burton (LIBERTAD) Act: allows lawsuits against entities trafficking in confiscated U.S. property",
+        "Non-U.S. entities: no U.S. secondary sanctions (unlike Iran/Russia) — but U.S.-nexus transactions prohibited"
+      ],
+      "allowedExceptions": [
+        "Authorized travel and related transactions",
+        "Food and agricultural products (General License)",
+        "Remittances",
+        "Telecommunications"
+      ],
+      "screeningRequired": ["Shipper", "Consignee", "Bank"],
+      "redFlags": [
+        "Cuban military entities (GAESA controls large portion of Cuban economy)",
+        "Transactions routed to avoid US dollar clearing"
+      ],
+      "severity": "HIGH"
+    },
+    {
+      "jurisdiction": "Syria",
+      "isoCode": "SY",
+      "sanctionsLevel": "COMPREHENSIVE",
+      "sanctioningBodies": ["OFAC (SYSR)", "EU", "UN", "UK"],
+      "triggerKeywords": ["Syria", "Syrian", "Damascus", "Assad regime", "Syrian Arab Republic", "SSNP"],
+      "keyRestrictions": [
+        "U.S. Syrian Sanctions Regulations: comprehensive prohibition on dealing with Syria",
+        "EU and UK comprehensive sanctions on Syrian government entities",
+        "UN arms embargo",
+        "Oil trade prohibited"
+      ],
+      "allowedExceptions": [
+        "Humanitarian goods with OFAC authorization",
+        "Some support to non-Assad controlled areas"
+      ],
+      "screeningRequired": ["All parties"],
+      "redFlags": [
+        "Lebanese intermediaries for Syria-destined goods",
+        "Turkish border crossing points used for Syria transit"
+      ],
+      "severity": "CRITICAL"
+    },
+    {
+      "jurisdiction": "Belarus",
+      "isoCode": "BY",
+      "sanctionsLevel": "TARGETED",
+      "sanctioningBodies": ["OFAC", "EU (multiple packages)", "UK", "Canada"],
+      "triggerKeywords": ["Belarus", "Belarusian", "Minsk", "Lukashenko", "Belaruskali", "Beltelecom"],
+      "keyRestrictions": [
+        "EU: multiple sanctions packages targeting Lukashenko regime",
+        "Listed entities and individuals: full asset freeze",
+        "Russia-Belarus circumvention: goods destined for Russia cannot be re-routed via Belarus",
+        "Export controls on technology, aviation, oil to Belarus",
+        "Listed state-owned entities: Belaruskali, Beltelecom, etc."
+      ],
+      "allowedExceptions": [
+        "Food, medicine, humanitarian goods"
+      ],
+      "screeningRequired": ["Shipper", "Consignee", "Beneficial Owner"],
+      "redFlags": [
+        "Goods with Russia connection routing via Belarus",
+        "Connections to listed Lukashenko regime members",
+        "Potash/fertilizer from Belaruskali (major sanctioned entity)"
+      ],
+      "severity": "HIGH"
+    },
+    {
+      "jurisdiction": "Venezuela",
+      "isoCode": "VE",
+      "sanctionsLevel": "TARGETED",
+      "sanctioningBodies": ["OFAC (E.O. 13884)", "EU"],
+      "triggerKeywords": ["Venezuela", "Venezuelan", "Caracas", "Maduro", "PDVSA", "Banco de Venezuela"],
+      "keyRestrictions": [
+        "OFAC E.O. 13884: blocking transactions with Venezuelan government",
+        "PDVSA (state oil company) sanctioned",
+        "Gold trade with Venezuelan government prohibited (EO 13850)",
+        "Non-government entities generally not comprehensively sanctioned"
+      ],
+      "allowedExceptions": [
+        "Certain oil transactions authorized temporarily (2023 OFAC General License)",
+        "Humanitarian trade"
+      ],
+      "screeningRequired": ["Consignee", "Bank", "End User"],
+      "redFlags": [
+        "PDVSA connections",
+        "Venezuelan government entities as buyers",
+        "Gold exports from Venezuela"
+      ],
+      "severity": "HIGH"
+    },
+    {
+      "jurisdiction": "Myanmar",
+      "isoCode": "MM",
+      "sanctionsLevel": "TARGETED",
+      "sanctioningBodies": ["OFAC", "EU", "UK", "Canada", "Australia"],
+      "triggerKeywords": ["Myanmar", "Burma", "Burmese", "Yangon", "Naypyidaw", "Tatmadaw", "military junta", "SAC"],
+      "keyRestrictions": [
+        "Military entities sanctioned: Tatmadaw leaders, military-owned conglomerates (MEHL, MEC)",
+        "Jade and rubies: import to US prohibited (JADE Act)",
+        "No comprehensive sanctions on civilian entities",
+        "Strong ASEAN ties remain — trade continues with civilian sector"
+      ],
+      "allowedExceptions": [
+        "Civilian sector trade generally permitted",
+        "Humanitarian trade"
+      ],
+      "screeningRequired": ["Beneficial Owner", "End User"],
+      "redFlags": [
+        "Connections to Myanmar military entities (MEHL, MEC, Tatmadaw commanders)",
+        "Gemstones (jade, rubies) — JADE Act prohibition",
+        "Goods likely to be used for military purposes"
+      ],
+      "severity": "MEDIUM"
+    },
+    {
+      "jurisdiction": "China (Export Controls)",
+      "isoCode": "CN-CTRL",
+      "sanctionsLevel": "ELEVATED",
+      "sanctioningBodies": ["U.S. BIS (Entity List, Unverified List, Military End-User List)", "Dept of Defense (CMDC List)", "OFAC (limited)"],
+      "triggerKeywords": ["China", "PRC", "Chinese", "Huawei", "ZTE", "HIKVISION", "Dahua", "ByteDance", "SMIC", "CNOOC"],
+      "keyRestrictions": [
+        "No comprehensive OFAC sanctions on China — but extensive export controls",
+        "BIS Entity List: hundreds of Chinese entities requiring license for US exports",
+        "October 2022 China chip rules: advanced semiconductors and manufacturing equipment restricted",
+        "Military End-User List: Chinese military-linked companies — license required for EAR items",
+        "Foreign Direct Product Rule (FDPR): US technology/equipment rules even for non-US made goods with US content",
+        "Huawei, ZTE: on Entity List — no supply of EAR items without BIS license",
+        "HIKVISION, Dahua: on Entity List for human rights concerns"
+      ],
+      "allowedExceptions": [
+        "EAR99 goods (not on CCL) to non-listed Chinese entities: generally no license required",
+        "Non-controlled civil goods to civilian end-users not on lists"
+      ],
+      "screeningRequired": ["End User", "Buyer", "Consignee", "Intermediate Consignee"],
+      "redFlags": [
+        "Any Huawei or affiliate in supply chain",
+        "Advanced chip or semiconductor equipment destined for China",
+        "Chinese military academy or PLA-affiliated research institutes as end-users",
+        "SMIC or other CMDC-listed entities",
+        "Goods with AI/surveillance applications (HIKVISION, Dahua supply chains)"
+      ],
+      "severity": "HIGH"
+    },
+    {
+      "jurisdiction": "Ukraine (Conflict Zone)",
+      "isoCode": "UA-CONFLICT",
+      "sanctionsLevel": "CONFLICT_ZONE",
+      "sanctioningBodies": ["N/A — Ukraine is sanction target recipient, not imposing party"],
+      "triggerKeywords": ["Crimea", "Donetsk", "Luhansk", "Russian-occupied Ukraine", "DNR", "LNR"],
+      "keyRestrictions": [
+        "CRIMEA: U.S. OFAC prohibits most trade with Crimea region",
+        "EU: Crimea/Sevastopol sanctions — no import/export/trade with Russian-controlled area",
+        "Russian-occupied territories (post-2022): treated as Russian territory for sanctions purposes",
+        "Non-occupied Ukraine: no sanctions — EU/US supportive of Ukrainian trade"
+      ],
+      "allowedExceptions": [
+        "Non-occupied Ukraine: trade generally permitted and encouraged",
+        "Humanitarian: extensive authorized exceptions"
+      ],
+      "screeningRequired": ["Destination sub-region must be identified"],
+      "redFlags": [
+        "Delivery address in Crimea, Donetsk, Luhansk regions",
+        "Goods with military application entering conflict zone"
+      ],
+      "severity": "HIGH"
+    },
+    {
+      "jurisdiction": "Lebanon",
+      "isoCode": "LB",
+      "sanctionsLevel": "TARGETED",
+      "sanctioningBodies": ["OFAC", "EU", "UN"],
+      "triggerKeywords": ["Lebanon", "Lebanese", "Beirut", "Hezbollah", "Hizbullah", "Al-Manar"],
+      "keyRestrictions": [
+        "Hezbollah and affiliates comprehensively sanctioned (OFAC, EU, UN)",
+        "Lebanon state entities not comprehensively sanctioned",
+        "Lebanon financial system: Banque du Liban and many banks under scrutiny post-financial collapse",
+        "Gold: Hezbollah financing through gold trade scrutinized"
+      ],
+      "allowedExceptions": [
+        "Legitimate civilian trade permitted"
+      ],
+      "screeningRequired": ["All parties", "Bank connections"],
+      "redFlags": [
+        "Hezbollah or affiliated entities",
+        "Transactions designed to circumvent Lebanon financial restrictions"
+      ],
+      "severity": "MEDIUM"
+    },
+    {
+      "jurisdiction": "Pakistan",
+      "isoCode": "PK",
+      "sanctionsLevel": "WATCH",
+      "sanctioningBodies": ["FATF (grey list — periodically)", "U.S. export controls"],
+      "triggerKeywords": ["Pakistan", "Pakistani", "Karachi", "Islamabad"],
+      "keyRestrictions": [
+        "No comprehensive sanctions",
+        "FATF: Pakistan on grey list periodically — enhanced AML scrutiny for financial transactions",
+        "Export controls: sensitive technology controls apply (dual-use, military)",
+        "Nuclear concerns: ISI and nuclear-related entities of concern"
+      ],
+      "allowedExceptions": ["Most trade permitted"],
+      "screeningRequired": ["End User for technology goods", "Bank (FATF compliance)"],
+      "redFlags": [
+        "Nuclear research institutions",
+        "ISI-affiliated entities",
+        "Military end-users for dual-use technology"
+      ],
+      "severity": "LOW"
+    },
+    {
+      "jurisdiction": "Iraq",
+      "isoCode": "IQ",
+      "sanctionsLevel": "WATCH",
+      "sanctioningBodies": ["OFAC (limited)", "UN (partial, historical)"],
+      "triggerKeywords": ["Iraq", "Iraqi", "Baghdad", "Mosul"],
+      "keyRestrictions": [
+        "No comprehensive Iraq sanctions (removed after Saddam era)",
+        "ISIS-affiliated entities remain listed",
+        "Dual-use goods: export controls apply",
+        "Iran nexus risk: Iraq used for Iran sanctions evasion"
+      ],
+      "allowedExceptions": ["Most civilian trade permitted"],
+      "screeningRequired": ["End User for technology", "Beneficial Owner"],
+      "redFlags": [
+        "ISIS-affiliated entities",
+        "Iran-nexus transactions using Iraq as transit",
+        "Military end-users for controlled technology"
+      ],
+      "severity": "MEDIUM"
+    },
+    {
+      "jurisdiction": "United Arab Emirates",
+      "isoCode": "AE",
+      "sanctionsLevel": "WATCH",
+      "sanctioningBodies": ["Not sanctioned — but enforcement concern"],
+      "triggerKeywords": ["UAE", "Dubai", "Abu Dhabi", "Sharjah"],
+      "keyRestrictions": [
+        "UAE itself is not sanctioned",
+        "MAJOR CIRCUMVENTION HUB: UAE is the #1 identified hub for Russia, Iran, and other sanctions evasion",
+        "G7 and EU have issued warnings and secondary sanctions threats to UAE entities",
+        "FATF grey list: UAE periodically listed — enhanced AML scrutiny"
+      ],
+      "allowedExceptions": ["Most trade permitted"],
+      "screeningRequired": ["Beneficial Owner", "End User", "Ultimate destination"],
+      "redFlags": [
+        "UAE company with Russian beneficial owners",
+        "UAE forwarding goods likely destined for Russia or Iran",
+        "Shell companies with no physical presence",
+        "Dual-use goods with no clear UAE end-use",
+        "Russian-owned vessels calling UAE ports"
+      ],
+      "severity": "MEDIUM",
+      "specialNote": "UAE is NOT sanctioned but is the primary documented circumvention hub for US/EU/UK sanctions on Russia and Iran. Enhanced due diligence required for UAE-based intermediaries."
+    },
+    {
+      "jurisdiction": "Turkey",
+      "isoCode": "TR",
+      "sanctionsLevel": "WATCH",
+      "sanctioningBodies": ["Not sanctioned — but enforcement concern"],
+      "triggerKeywords": ["Turkey", "Turkish", "Türkiye", "Istanbul", "Ankara"],
+      "keyRestrictions": [
+        "Turkey not sanctioned",
+        "Documented Russia circumvention hub — second largest after UAE",
+        "G7 issued specific warnings to Turkey on Russia sanctions compliance",
+        "Turkey maintains independent policy — trades with Russia despite NATO membership"
+      ],
+      "allowedExceptions": ["Most trade permitted"],
+      "screeningRequired": ["End User", "Beneficial Owner", "Ultimate destination"],
+      "redFlags": [
+        "Turkish intermediaries routing goods to Russia",
+        "Dual-use goods with no clear Turkish end-use",
+        "Russian-connected Turkish entities"
+      ],
+      "severity": "MEDIUM"
+    },
+    {
+      "jurisdiction": "India (Strategic Autonomy)",
+      "isoCode": "IN-SA",
+      "sanctionsLevel": "WATCH",
+      "sanctioningBodies": ["Not sanctioned"],
+      "triggerKeywords": [],
+      "keyRestrictions": [
+        "India not sanctioned and not a Russia circumvention hub per se",
+        "India maintains strategic autonomy — imports Russian oil, weapons",
+        "US/EU monitor re-export of controlled goods from India to Russia",
+        "Dual-use and export-controlled goods exported to India require end-use monitoring"
+      ],
+      "allowedExceptions": ["Most trade permitted"],
+      "screeningRequired": ["End User for dual-use technology"],
+      "redFlags": [
+        "Dual-use goods to Russian-connected Indian companies",
+        "Technology goods with India end-use likely re-exported to Russia or China"
+      ],
+      "severity": "LOW"
+    }
+  ],
+  "fatfHighRiskJurisdictions": {
+    "description": "FATF High-Risk Jurisdictions subject to a Call for Action (formerly 'Black List'). Financial transactions with these jurisdictions require enhanced due diligence.",
+    "currentList_2024": ["Iran", "North Korea", "Myanmar"],
+    "note": "FATF list updated February and June each year. Always verify current list."
+  },
+  "fatfIncreasedMonitoring": {
+    "description": "FATF Jurisdictions Under Increased Monitoring (Grey List). Not high-risk but require enhanced vigilance.",
+    "currentList_2024": ["Bulgaria", "Burkina Faso", "Cameroon", "Croatia", "Democratic Republic of Congo", "Haiti", "Jamaica", "Kenya", "Mali", "Monaco", "Mozambique", "Namibia", "Nigeria", "Philippines", "Senegal", "South Africa", "Tanzania", "Vietnam", "Yemen"],
+    "note": "FATF grey list updated February and June each year. Verify current list before processing financial transactions."
+  }
+}

@@ -1,0 +1,591 @@
+{
+  "_catalog": {
+    "name": "CargoTrack HS Code Intelligence Catalog",
+    "version": "1.0.0",
+    "effectiveDate": "2024-01-01",
+    "sources": [
+      "World Customs Organization (WCO) Harmonized System 2022",
+      "U.S. International Trade Commission (USITC) HTS",
+      "European Commission Combined Nomenclature (CN) 2024",
+      "BIS Commerce Control List (CCL) — Export Administration Regulations",
+      "EU Dual-Use Regulation (EU) 2021/821",
+      "CITES Appendices (wildlife trade)"
+    ],
+    "note": "HS Chapter classifications cover the top 50 chapters by global trade volume. 4-digit heading detail is provided for high-risk or strategically significant headings."
+  },
+  "chapters": [
+    {
+      "chapter": "01",
+      "label": "Live Animals",
+      "dgRisk": false,
+      "exportControlRisk": "LOW",
+      "sanctionsRisk": "LOW",
+      "customsNotes": "CITES permits required for endangered species (Appendix I, II). Phytosanitary/veterinary health certificates required. Import restrictions in many countries.",
+      "requiredDocumentsImport": ["Veterinary Health Certificate", "CITES Permit (if applicable)", "Import Permit"],
+      "antiDumpingRisk": false,
+      "keyComplianceConcerns": ["CITES compliance", "Animal welfare regulations", "Disease control (FMD, avian influenza)"]
+    },
+    {
+      "chapter": "02",
+      "label": "Meat and Edible Meat Offal",
+      "dgRisk": false,
+      "exportControlRisk": "LOW",
+      "sanctionsRisk": "LOW",
+      "customsNotes": "Food safety certification mandatory. Halal/Kosher certification where required. Cold chain documentation critical. Country-of-origin labelling required in most markets.",
+      "requiredDocumentsImport": ["Sanitary Certificate", "Veterinary Health Certificate", "Certificate of Origin", "Cold Chain Record"],
+      "antiDumpingRisk": false,
+      "keyComplianceConcerns": ["Food safety (FSSAI/FDA/EFSA)", "Halal certification (Muslim-majority markets)", "Disease-free country status"]
+    },
+    {
+      "chapter": "03",
+      "label": "Fish and Crustaceans, Molluscs",
+      "dgRisk": false,
+      "exportControlRisk": "LOW",
+      "sanctionsRisk": "LOW",
+      "customsNotes": "Catch certificates required (EU IUU Regulation). Aquaculture products need health certificate. CITES for some shark fins, seahorses. Halal certification for Muslim markets.",
+      "requiredDocumentsImport": ["Catch Certificate (EU IUU)", "Health Certificate", "Certificate of Origin"],
+      "antiDumpingRisk": true,
+      "antiDumpingNotes": "EU and US anti-dumping duties on shrimp from certain Asian countries",
+      "keyComplianceConcerns": ["IUU fishing compliance", "CITES (certain species)", "Anti-dumping"]
+    },
+    {
+      "chapter": "08",
+      "label": "Edible Fruit and Nuts",
+      "dgRisk": false,
+      "exportControlRisk": "LOW",
+      "sanctionsRisk": "LOW",
+      "customsNotes": "Phytosanitary certificate mandatory. Pesticide residue compliance (MRL). Country-of-origin labelling. Some countries restrict import from pest-affected regions.",
+      "requiredDocumentsImport": ["Phytosanitary Certificate", "Certificate of Origin", "Pesticide Residue Test Report"],
+      "antiDumpingRisk": false,
+      "keyComplianceConcerns": ["Phytosanitary compliance", "Pesticide MRLs", "Origin marking"]
+    },
+    {
+      "chapter": "09",
+      "label": "Coffee, Tea, Maté and Spices",
+      "dgRisk": false,
+      "exportControlRisk": "LOW",
+      "sanctionsRisk": "LOW",
+      "customsNotes": "Phytosanitary certificate. Food safety certification. Geographic Indications (GI) — e.g., Darjeeling tea, Ceylon tea — may be protected. ICO coffee export certification for some markets.",
+      "requiredDocumentsImport": ["Phytosanitary Certificate", "Health Certificate", "Certificate of Origin"],
+      "antiDumpingRisk": false,
+      "keyComplianceConcerns": ["Geographic Indication compliance", "Food safety", "Aflatoxin limits (spices)"]
+    },
+    {
+      "chapter": "10",
+      "label": "Cereals",
+      "dgRisk": false,
+      "exportControlRisk": "LOW",
+      "sanctionsRisk": "LOW",
+      "customsNotes": "Phytosanitary certificate. GMO labelling/authorization requirements. Some countries require non-GMO certificate. TRQs (Tariff Rate Quotas) common for cereals.",
+      "requiredDocumentsImport": ["Phytosanitary Certificate", "Certificate of Origin", "Non-GMO Certificate (where required)"],
+      "antiDumpingRisk": false,
+      "keyComplianceConcerns": ["GMO regulations", "TRQ management", "Phytosanitary compliance"]
+    },
+    {
+      "chapter": "12",
+      "label": "Oil Seeds and Oleaginous Fruits",
+      "dgRisk": false,
+      "exportControlRisk": "LOW",
+      "sanctionsRisk": "LOW",
+      "customsNotes": "Phytosanitary certificate. Deforestation regulations (EU EUDR for palm oil, soya). GMO compliance required. Moisture content documentation for risk of spontaneous combustion in large quantities.",
+      "requiredDocumentsImport": ["Phytosanitary Certificate", "EUDR Due Diligence Statement (EU imports)", "Certificate of Origin"],
+      "antiDumpingRisk": false,
+      "keyComplianceConcerns": ["EU Deforestation Regulation (EUDR)", "GMO compliance", "Spontaneous combustion risk in bulk (Class 4.2 DG)"]
+    },
+    {
+      "chapter": "15",
+      "label": "Animal/Vegetable Fats and Oils",
+      "dgRisk": false,
+      "exportControlRisk": "LOW",
+      "sanctionsRisk": "LOW",
+      "customsNotes": "EUDR applies to palm oil. Halal certification required for many markets. Sustainability certification (RSPO for palm oil). Saponification value tests for customs classification.",
+      "requiredDocumentsImport": ["Certificate of Origin", "RSPO Certificate (palm oil)", "Halal Certificate (where required)", "EUDR Statement"],
+      "antiDumpingRisk": false,
+      "keyComplianceConcerns": ["EUDR deforestation compliance", "Halal compliance", "Sustainability certification"]
+    },
+    {
+      "chapter": "22",
+      "label": "Beverages, Spirits and Vinegar",
+      "dgRisk": true,
+      "dgClass": "3",
+      "dgNotes": "High-alcohol beverages (>24% ABV) classified as Class 3 Flammable Liquid for air freight",
+      "exportControlRisk": "LOW",
+      "sanctionsRisk": "LOW",
+      "customsNotes": "Alcohol import prohibited or strictly licensed in Islamic-majority countries (Saudi Arabia, UAE for non-free zones, Indonesia). Age verification. Geographic Indications (Champagne, Cognac, Scotch Whisky, Bourbon). Excise duties significant.",
+      "requiredDocumentsImport": ["Certificate of Origin", "Health Certificate", "Import License/Permit (many countries)", "GI Compliance Documentation"],
+      "antiDumpingRisk": false,
+      "keyComplianceConcerns": ["Alcohol import prohibition (certain countries)", "Geographic Indication protection", "Excise duty compliance", "Age labelling"]
+    },
+    {
+      "chapter": "24",
+      "label": "Tobacco and Manufactured Tobacco Substitutes",
+      "dgRisk": false,
+      "exportControlRisk": "LOW",
+      "sanctionsRisk": "LOW",
+      "customsNotes": "High excise duty globally. WHO FCTC compliance. Track and trace requirements (EU TPD, US FDA). Many countries require import permit. Tight regulatory environment.",
+      "requiredDocumentsImport": ["Import License", "Health Warning Compliance Certificate", "Track and Trace (EU)", "Certificate of Origin"],
+      "antiDumpingRisk": false,
+      "keyComplianceConcerns": ["Track and trace compliance", "Health warning requirements", "Excise duty compliance", "Illicit trade risk"]
+    },
+    {
+      "chapter": "27",
+      "label": "Mineral Fuels, Mineral Oils, Petroleum Products",
+      "dgRisk": true,
+      "dgClass": "3",
+      "dgNotes": "Most petroleum products are Class 3 Flammable Liquids. LPG and natural gas are Class 2.",
+      "exportControlRisk": "MEDIUM",
+      "sanctionsRisk": "MEDIUM",
+      "customsNotes": "Oil price cap sanctions on Russia (G7): crude ≤$60/barrel, petroleum products ≤$45-100/barrel depending on type. Price attestation required. OFAC compliance for oil from sanctioned origins.",
+      "requiredDocumentsImport": ["Certificate of Origin", "Quality/Grade Certificate", "Price Attestation (Russian-origin goods)", "Bill of Lading", "DG Declaration"],
+      "antiDumpingRisk": false,
+      "keyComplianceConcerns": ["Russia oil price cap compliance", "Sanctions on Iranian oil", "Venezuela sanctions", "DG classification and documentation"],
+      "criticalHeadings": {
+        "2709": "Crude petroleum — Russian origin subject to oil price cap",
+        "2710": "Petroleum products (diesel, petrol, jet fuel) — most common Class 3 DG"
+      }
+    },
+    {
+      "chapter": "28",
+      "label": "Inorganic Chemicals (acids, alkalis, salts, metals)",
+      "dgRisk": true,
+      "dgClass": "2,5,6,7,8",
+      "dgNotes": "This chapter contains multiple DG classes: compressed gases, oxidizers, toxic substances, radioactive isotopes, corrosives",
+      "exportControlRisk": "HIGH",
+      "sanctionsRisk": "MEDIUM",
+      "customsNotes": "Broad chapter with many dual-use chemicals. Export license required for many chemicals under EU Dual-Use Reg 2021/821 and U.S. EAR CCL. Chemical Weapons Convention (CWC) schedules apply to some headings.",
+      "requiredDocumentsImport": ["SDS/MSDS", "Certificate of Analysis", "Export License (if controlled)", "CWC compliance (Schedule 1/2 chemicals)"],
+      "antiDumpingRisk": true,
+      "antiDumpingNotes": "EU AD duties on sodium gluconate, citric acid, other inorganics from China",
+      "keyComplianceConcerns": ["Dual-use export controls", "CWC Schedule chemicals", "DG multi-class complexity", "Anti-dumping"],
+      "criticalHeadings": {
+        "2844": "Radioactive elements — Class 7, strict licensing",
+        "2814": "Ammonia — Class 2.3 Toxic Gas",
+        "2807": "Sulphuric acid — Class 8 Corrosive",
+        "2806": "Hydrochloric acid — Class 8 Corrosive"
+      }
+    },
+    {
+      "chapter": "29",
+      "label": "Organic Chemicals",
+      "dgRisk": true,
+      "dgClass": "3,6,8",
+      "dgNotes": "Organic chemicals span multiple DG classes: flammable liquids (solvents), toxic substances, corrosives",
+      "exportControlRisk": "HIGH",
+      "sanctionsRisk": "MEDIUM",
+      "customsNotes": "Chemical precursor controls. EU Dual-Use Regulation and U.S. EAR CCL cover many organic chemicals. Drug precursor controls (DEA in US, INCB internationally). CWC Schedule 2/3 chemicals include many common organic compounds.",
+      "requiredDocumentsImport": ["SDS/MSDS", "Certificate of Analysis", "Export License (if controlled)", "Drug precursor declaration"],
+      "antiDumpingRisk": true,
+      "antiDumpingNotes": "EU AD on many Chinese organic chemicals",
+      "keyComplianceConcerns": ["Drug precursor controls (INCB)", "Dual-use export controls", "CWC Schedule 2 chemicals", "Anti-dumping"],
+      "criticalHeadings": {
+        "2902": "Cyclic hydrocarbons — benzene, toluene (toxic, flammable)",
+        "2921": "Amine-function compounds — industrial amines (CWC Schedule 2 for some)",
+        "2933": "Heterocyclic compounds — includes some pharmaceutical precursors"
+      }
+    },
+    {
+      "chapter": "30",
+      "label": "Pharmaceutical Products",
+      "dgRisk": false,
+      "exportControlRisk": "LOW",
+      "sanctionsRisk": "LOW",
+      "customsNotes": "Import licensing mandatory in most countries. GMP (Good Manufacturing Practice) certificates required. Controlled substances (narcotics, psychotropics) require INCB import/export authorization. Cold chain for biologics. Market Authorization required.",
+      "requiredDocumentsImport": ["Import License", "GMP Certificate", "Certificate of Analysis", "INCB Import Authorization (controlled substances)", "Market Authorization/Approval", "Cold Chain Record (biologics)"],
+      "antiDumpingRisk": false,
+      "keyComplianceConcerns": ["Controlled substance INCB authorization", "GMP compliance", "Cold chain integrity", "Market authorization"],
+      "criticalHeadings": {
+        "3002": "Vaccines, blood, toxins, cultures — Class 6.2 infectious substances if applicable",
+        "3004": "Medicaments — may include controlled substances"
+      }
+    },
+    {
+      "chapter": "31",
+      "label": "Fertilizers",
+      "dgRisk": true,
+      "dgClass": "5.1",
+      "dgNotes": "Ammonium nitrate fertilizers are Class 5.1 Oxidizing substances and dual-use explosive precursors",
+      "exportControlRisk": "HIGH",
+      "sanctionsRisk": "MEDIUM",
+      "customsNotes": "Ammonium nitrate: dual-use — fertilizer and explosive precursor. Many countries require licenses for import/export. CBAM applies in EU (carbon content). Russian fertilizers sanctioned/restricted.",
+      "requiredDocumentsImport": ["Certificate of Analysis (especially N content)", "Import Permit (ammonium nitrate)", "End-use Certificate", "DG Declaration (Class 5.1)"],
+      "antiDumpingRisk": true,
+      "antiDumpingNotes": "US and EU anti-dumping on fertilizers from Russia, China, and other origins",
+      "keyComplianceConcerns": ["Dual-use: explosive precursor risk", "CBAM (EU)", "Russia sanctions", "Anti-dumping"],
+      "criticalHeadings": {
+        "3102": "Ammonium nitrate — explosive precursor, Class 5.1, end-use critical"
+      }
+    },
+    {
+      "chapter": "32",
+      "label": "Tanning/Dyeing Extracts, Paints, Inks",
+      "dgRisk": true,
+      "dgClass": "3",
+      "dgNotes": "Most paints, varnishes, lacquers contain flammable solvents — Class 3",
+      "exportControlRisk": "LOW",
+      "sanctionsRisk": "LOW",
+      "customsNotes": "VOC content limits apply in EU and US for environmental compliance. REACH registration for chemical components. Anti-dumping on Chinese titanium dioxide.",
+      "requiredDocumentsImport": ["SDS for all products", "VOC Compliance Certificate"],
+      "antiDumpingRisk": true,
+      "antiDumpingNotes": "EU anti-dumping on titanium dioxide from China; pigments subject to scrutiny",
+      "keyComplianceConcerns": ["DG Class 3 compliance", "VOC limits", "REACH compliance"]
+    },
+    {
+      "chapter": "33",
+      "label": "Essential Oils, Perfumes, Cosmetics",
+      "dgRisk": true,
+      "dgClass": "3",
+      "dgNotes": "Perfumes and many essential oils are Class 3 Flammable Liquids (alcohol content)",
+      "exportControlRisk": "LOW",
+      "sanctionsRisk": "LOW",
+      "customsNotes": "Cosmetics registration required in many markets (EU CPNP, China NMPA, India licensing). Alcohol-based products classified as DG. Ingredient labelling requirements. IFRA standards for fragrance.",
+      "requiredDocumentsImport": ["Safety Assessment", "CPNP Notification (EU)", "China NMPA Registration", "SDS (for DG items)"],
+      "antiDumpingRisk": false,
+      "keyComplianceConcerns": ["Cosmetics regulatory registration", "DG Class 3 for alcohol-based products", "Ingredient labelling compliance"]
+    },
+    {
+      "chapter": "36",
+      "label": "Explosives, Pyrotechnic Products, Matches",
+      "dgRisk": true,
+      "dgClass": "1",
+      "dgNotes": "All products in this chapter are Class 1 Explosives — most FORBIDDEN by air",
+      "exportControlRisk": "CRITICAL",
+      "sanctionsRisk": "HIGH",
+      "customsNotes": "Government license required in virtually every country for import and export. High diversion risk. End-user certificate mandatory. UN Number and proper shipping name on all packaging. Cannot transit without authorization.",
+      "requiredDocumentsImport": ["Government Import License", "Export License (origin country)", "End-User Certificate (EUC)", "Shipper's Declaration for DG", "Police/security authorization (many countries)"],
+      "antiDumpingRisk": false,
+      "keyComplianceConcerns": ["Government licensing mandatory", "End-user verification critical", "Diversion risk", "FORBIDDEN by air (most divisions)"],
+      "criticalHeadings": {
+        "3601": "Propellant powders — CRITICAL screening",
+        "3602": "Prepared explosives — CRITICAL screening",
+        "3603": "Safety fuses, detonating fuses, detonators",
+        "3604": "Fireworks, signal flares, rockets — Class 1 DG"
+      }
+    },
+    {
+      "chapter": "38",
+      "label": "Miscellaneous Chemical Products",
+      "dgRisk": true,
+      "dgClass": "3,6,8,9",
+      "dgNotes": "Mixed chapter — industrial chemicals span multiple DG classes",
+      "exportControlRisk": "MEDIUM",
+      "sanctionsRisk": "LOW",
+      "customsNotes": "REACH pre-registration required for EU. Biocidal Products Regulation (EU) for pest control. Some headings include dual-use chemicals. Anti-dumping duties on biodiesel from various origins.",
+      "requiredDocumentsImport": ["SDS for all products", "REACH registration proof", "Biocidal Products Authorization"],
+      "antiDumpingRisk": true,
+      "antiDumpingNotes": "EU and US anti-dumping duties on biodiesel from Argentina, Indonesia",
+      "keyComplianceConcerns": ["REACH compliance", "DG multi-class complexity", "Anti-dumping (biodiesel)"]
+    },
+    {
+      "chapter": "39",
+      "label": "Plastics and Articles Thereof",
+      "dgRisk": false,
+      "exportControlRisk": "LOW",
+      "sanctionsRisk": "LOW",
+      "customsNotes": "EU Single Use Plastics Directive restrictions. Plastic waste trade restrictions (Basel Convention amendment). Some plastic raw materials may be DG (e.g., reactive monomers). Anti-dumping on Chinese polyester film, PET.",
+      "requiredDocumentsImport": ["Certificate of Origin", "Basel permit (if plastic waste)"],
+      "antiDumpingRisk": true,
+      "antiDumpingNotes": "EU/US anti-dumping on PET, polyester film, certain plastics from China",
+      "keyComplianceConcerns": ["Basel Convention (plastic waste)", "Single-use plastics restrictions", "Anti-dumping"]
+    },
+    {
+      "chapter": "40",
+      "label": "Rubber and Articles Thereof",
+      "dgRisk": false,
+      "exportControlRisk": "LOW",
+      "sanctionsRisk": "LOW",
+      "customsNotes": "Natural rubber: phytosanitary requirements. Used tyres trade heavily restricted (environmental). Deforestation regulations (EUDR) apply to natural rubber as of 2025.",
+      "requiredDocumentsImport": ["Certificate of Origin", "Phytosanitary Certificate (natural rubber)", "EUDR Due Diligence Statement (EU, from 2025)"],
+      "antiDumpingRisk": true,
+      "antiDumpingNotes": "Anti-dumping on Chinese tyres in US and EU",
+      "keyComplianceConcerns": ["EUDR (natural rubber from 2025)", "Used tyre restrictions", "Anti-dumping (tyres)"]
+    },
+    {
+      "chapter": "44",
+      "label": "Wood and Articles of Wood",
+      "dgRisk": false,
+      "exportControlRisk": "LOW",
+      "sanctionsRisk": "MEDIUM",
+      "customsNotes": "EUDR (EU Deforestation Regulation): timber importers must prove no deforestation. U.S. Lacey Act: import of illegally harvested wood prohibited. CITES for protected timber species (rosewood, ebony). Phytosanitary certificate for wood packaging (ISPM 15).",
+      "requiredDocumentsImport": ["EUDR Due Diligence Statement (EU)", "Lacey Act Declaration (US)", "CITES Permit (protected species)", "ISPM 15 Phytosanitary Certificate", "Certificate of Origin"],
+      "antiDumpingRisk": true,
+      "antiDumpingNotes": "US AD/CVD on Chinese wood flooring, plywood",
+      "keyComplianceConcerns": ["EUDR deforestation compliance", "Lacey Act illegal logging", "CITES protected species", "ISPM 15 wood packaging"]
+    },
+    {
+      "chapter": "48",
+      "label": "Paper and Paperboard",
+      "dgRisk": false,
+      "exportControlRisk": "LOW",
+      "sanctionsRisk": "LOW",
+      "customsNotes": "Waste paper: Basel Convention amendment (from 2021, trade between OECD and non-OECD requires prior consent). Anti-dumping on coated paper from China and Indonesia.",
+      "requiredDocumentsImport": ["Certificate of Origin", "Basel prior consent (waste paper)"],
+      "antiDumpingRisk": true,
+      "antiDumpingNotes": "EU/US anti-dumping on coated fine paper from China, Indonesia",
+      "keyComplianceConcerns": ["Waste paper Basel compliance", "Anti-dumping"]
+    },
+    {
+      "chapter": "50",
+      "label": "Silk",
+      "dgRisk": false,
+      "exportControlRisk": "LOW",
+      "sanctionsRisk": "LOW",
+      "customsNotes": "Certificate of origin important for tariff preference claims. Forced labour risk — Xinjiang cotton/textiles supply chain due diligence.",
+      "requiredDocumentsImport": ["Certificate of Origin"],
+      "antiDumpingRisk": false,
+      "keyComplianceConcerns": ["Supply chain forced labour due diligence (Xinjiang)"]
+    },
+    {
+      "chapter": "52",
+      "label": "Cotton",
+      "dgRisk": false,
+      "exportControlRisk": "LOW",
+      "sanctionsRisk": "HIGH",
+      "customsNotes": "UFLPA (Uyghur Forced Labor Prevention Act — US): rebuttable presumption that goods from Xinjiang are made with forced labour. VERY HIGH scrutiny on Chinese cotton. Importer must prove non-Xinjiang origin or use non-China origin cotton.",
+      "requiredDocumentsImport": ["Certificate of Origin", "Supply Chain Due Diligence Documentation (Xinjiang risk)", "UFLPA compliance documentation (US)"],
+      "antiDumpingRisk": true,
+      "antiDumpingNotes": "US anti-dumping on Chinese cotton products",
+      "keyComplianceConcerns": ["UFLPA forced labour (Xinjiang cotton — critical risk)", "Supply chain traceability", "Anti-dumping"]
+    },
+    {
+      "chapter": "61",
+      "label": "Knitted or Crocheted Clothing",
+      "dgRisk": false,
+      "exportControlRisk": "LOW",
+      "sanctionsRisk": "MEDIUM",
+      "customsNotes": "UFLPA concerns for China-origin clothing. Rules of Origin particularly complex — 'substantial transformation' doctrine. Country of origin marking required on all garments (US). Flammability standards compliance.",
+      "requiredDocumentsImport": ["Certificate of Origin", "Flammability Test Report", "Supply Chain Traceability (Xinjiang risk)"],
+      "antiDumpingRisk": false,
+      "keyComplianceConcerns": ["UFLPA/Xinjiang forced labour", "Rules of Origin complexity", "Flammability compliance"]
+    },
+    {
+      "chapter": "62",
+      "label": "Woven Clothing and Apparel",
+      "dgRisk": false,
+      "exportControlRisk": "LOW",
+      "sanctionsRisk": "MEDIUM",
+      "customsNotes": "Same considerations as Chapter 61. High tariff rates on China-origin garments in US (Section 301). Rules of Origin: yarn-forward rule applies under most US FTAs.",
+      "requiredDocumentsImport": ["Certificate of Origin", "Supply Chain Traceability", "Flammability Certificate"],
+      "antiDumpingRisk": false,
+      "keyComplianceConcerns": ["UFLPA/Xinjiang forced labour", "Section 301 tariffs", "Rules of Origin (yarn-forward)"]
+    },
+    {
+      "chapter": "63",
+      "label": "Other Textile Articles",
+      "dgRisk": false,
+      "exportControlRisk": "LOW",
+      "sanctionsRisk": "MEDIUM",
+      "customsNotes": "Similar to Chapters 61-62 for forced labour and origin concerns. Used textiles/clothing: regulated under EU textile waste regulations. Some countries ban used clothing imports.",
+      "requiredDocumentsImport": ["Certificate of Origin"],
+      "antiDumpingRisk": false,
+      "keyComplianceConcerns": ["Xinjiang forced labour supply chain", "Used clothing restrictions"]
+    },
+    {
+      "chapter": "71",
+      "label": "Precious Metals, Stones, Jewellery, Coins",
+      "dgRisk": false,
+      "exportControlRisk": "MEDIUM",
+      "sanctionsRisk": "HIGH",
+      "customsNotes": "Kimberley Process Certification Scheme (KPCS) mandatory for rough diamonds. Conflict minerals reporting (U.S. Dodd-Frank Section 1502). Russia: G7 banned Russian diamonds >1 carat. High value — CVD risk for gold from conflict zones. Declared value accuracy critical.",
+      "requiredDocumentsImport": ["Kimberley Process Certificate (rough diamonds)", "Certificate of Origin", "Declared value supporting documentation", "Conflict minerals declaration"],
+      "antiDumpingRisk": false,
+      "keyComplianceConcerns": ["Kimberley Process (conflict diamonds)", "Russia diamond ban (G7)", "Conflict minerals Dodd-Frank", "High declared value accuracy"],
+      "criticalHeadings": {
+        "7102": "Diamonds — Kimberley Process mandatory, Russia ban",
+        "7108": "Gold — conflict gold due diligence"
+      }
+    },
+    {
+      "chapter": "72",
+      "label": "Iron and Steel",
+      "dgRisk": false,
+      "exportControlRisk": "LOW",
+      "sanctionsRisk": "MEDIUM",
+      "customsNotes": "Section 232 tariffs: 25% steel, 10% aluminium (US). EU CBAM: carbon pricing applies from 2026. Russia sanctions: most steel banned in US and EU. Anti-dumping extensive on Chinese, Indian, and other origins. Mill certificates required.",
+      "requiredDocumentsImport": ["Mill Certificate / Test Report", "Certificate of Origin", "Chemical composition certificate"],
+      "antiDumpingRisk": true,
+      "antiDumpingNotes": "Extensive AD/CVD orders on steel from China, India, Korea, Taiwan, Russia (US and EU)",
+      "keyComplianceConcerns": ["Section 232 tariffs (US)", "CBAM (EU)", "Russia sanctions", "Extensive anti-dumping", "Mill certificate verification"]
+    },
+    {
+      "chapter": "73",
+      "label": "Articles of Iron or Steel",
+      "dgRisk": false,
+      "exportControlRisk": "LOW",
+      "sanctionsRisk": "LOW",
+      "customsNotes": "Anti-dumping duties on many Chinese and other origin steel articles. Section 232 tariffs may apply based on steel content. Mill certificates for high-specification items.",
+      "requiredDocumentsImport": ["Certificate of Origin", "Mill Certificate (if applicable)"],
+      "antiDumpingRisk": true,
+      "antiDumpingNotes": "AD on welded tubes, wire rods, wire hangers, etc. from China",
+      "keyComplianceConcerns": ["Anti-dumping", "Section 232 exposure", "Origin marking"]
+    },
+    {
+      "chapter": "76",
+      "label": "Aluminium and Articles Thereof",
+      "dgRisk": false,
+      "exportControlRisk": "LOW",
+      "sanctionsRisk": "MEDIUM",
+      "customsNotes": "Section 232: 10% tariff on aluminium (US). CBAM applies from 2026 (EU). Russia sanctions: Russian aluminium restricted (RUSAL-connected entities). Anti-dumping on Chinese aluminium extrusions.",
+      "requiredDocumentsImport": ["Certificate of Origin", "Mill Certificate"],
+      "antiDumpingRisk": true,
+      "antiDumpingNotes": "AD on Chinese aluminium extrusions (US and EU)",
+      "keyComplianceConcerns": ["Section 232 tariffs", "CBAM", "Russia sanctions (RUSAL)", "Anti-dumping"]
+    },
+    {
+      "chapter": "84",
+      "label": "Nuclear Reactors, Boilers, Machinery and Mechanical Appliances",
+      "dgRisk": false,
+      "exportControlRisk": "HIGH",
+      "sanctionsRisk": "MEDIUM",
+      "customsNotes": "Broad chapter covering significant dual-use goods. BIS CCL covers many headings under ECCNs 2A, 2B, 3B, 4A. Semiconductor manufacturing equipment: heightened controls (EAR/EU). Machine tools: controlled destinations. CE marking (EU) mandatory.",
+      "requiredDocumentsImport": ["Certificate of Origin", "CE Declaration of Conformity (EU)", "Export License (if applicable)", "End-User Certificate (dual-use)"],
+      "antiDumpingRisk": true,
+      "antiDumpingNotes": "AD on Chinese machine tools, hydraulic systems, solar components",
+      "keyComplianceConcerns": ["Dual-use export controls (BIS/EU)", "CE marking", "End-use verification", "Semiconductor equipment — CRITICAL controls"],
+      "criticalHeadings": {
+        "8401": "Nuclear reactors — CRITICAL dual-use, NRC license required",
+        "8486": "Semiconductor manufacturing equipment — ECCN 3B001/3B002, China license likely required",
+        "8412": "Hydraulic systems — potential ECCN controls",
+        "8419": "Industrial process equipment — verify ECCN"
+      }
+    },
+    {
+      "chapter": "85",
+      "label": "Electrical Machinery, Electronics, Computers",
+      "dgRisk": true,
+      "dgClass": "9",
+      "dgNotes": "Lithium batteries in electronics (UN3481). Standalone lithium batteries (UN3480) also Class 9.",
+      "exportControlRisk": "HIGH",
+      "sanctionsRisk": "HIGH",
+      "customsNotes": "Very broad chapter. Major dual-use concerns: semiconductors (ECCN 3A001), encryption technology (ECCN 5E002), telecommunications (ECCN 5A001). Huawei and ZTE: Entity List — no supply without BIS license. Russia/China/Iran restrictions on electronics.",
+      "requiredDocumentsImport": ["Certificate of Origin", "CE/UKCA/FCC Declaration", "Export License (if ECCN-controlled)", "DG Declaration (lithium batteries)", "BIS Entity List screening clearance"],
+      "antiDumpingRisk": true,
+      "antiDumpingNotes": "AD on Chinese solar panels, LED displays, large power transformers",
+      "keyComplianceConcerns": ["Dual-use ECCN controls (semiconductors, encryption, telecom)", "Huawei/ZTE Entity List — no supply without license", "Russia/China electronics restrictions", "Lithium battery DG compliance", "CE/FCC marking"],
+      "criticalHeadings": {
+        "8471": "Computers — ECCN 4A003 for high-performance; Xinjiang DAS lists",
+        "8473": "Computer parts — verify ECCN for high-performance components",
+        "8517": "Telecommunications — ECCN 5A001; Huawei/ZTE Entity List",
+        "8542": "Integrated circuits/semiconductors — ECCN 3A001 critical; China restrictions",
+        "8507": "Lithium batteries — Class 9 DG, UN3480/3481"
+      }
+    },
+    {
+      "chapter": "86",
+      "label": "Railway Locomotives, Rolling Stock",
+      "dgRisk": false,
+      "exportControlRisk": "LOW",
+      "sanctionsRisk": "LOW",
+      "customsNotes": "Large/heavy lift logistics required. Type approval certificates. Russia sanctions: trains/parts restricted.",
+      "requiredDocumentsImport": ["Certificate of Origin", "Type Approval Certificate"],
+      "antiDumpingRisk": false,
+      "keyComplianceConcerns": ["Russia sanctions", "Type approval", "Oversized cargo logistics"]
+    },
+    {
+      "chapter": "87",
+      "label": "Vehicles (Automobiles, Motorcycles, Parts)",
+      "dgRisk": true,
+      "dgClass": "3,9",
+      "dgNotes": "Vehicles with fuel: Class 3 (flammable liquid in tank). EVs: Class 9 lithium batteries. Airbag inflators: Class 1.",
+      "exportControlRisk": "LOW",
+      "sanctionsRisk": "MEDIUM",
+      "customsNotes": "Type approval mandatory (EU WVTA, US FMVSS). Safety standards compliance. Russia sanctions: vehicles restricted. Anti-dumping on Chinese EVs (EU 2024: up to 38% AD duties). CBP enforcement on VIN numbers.",
+      "requiredDocumentsImport": ["Certificate of Conformity / Type Approval", "Certificate of Origin", "DG Declaration (fuel/batteries/airbags)", "Odometer disclosure"],
+      "antiDumpingRisk": true,
+      "antiDumpingNotes": "EU: significant AD duties on Chinese EVs announced 2024 (BYD 17%, SAIC 38%). US: 100% tariff on Chinese EVs.",
+      "keyComplianceConcerns": ["EU anti-dumping on Chinese EVs (CRITICAL if EV)", "Type approval compliance", "DG classification (EV batteries)", "Russia vehicle sanctions"]
+    },
+    {
+      "chapter": "88",
+      "label": "Aircraft, Spacecraft",
+      "dgRisk": false,
+      "exportControlRisk": "CRITICAL",
+      "sanctionsRisk": "HIGH",
+      "customsNotes": "Export license from Dept of State (ITAR) mandatory for most aircraft and parts. EAR controls on commercial aircraft. Russia sanctions: no civilian aircraft or parts. ITAR controls virtually all military and many dual-use aerospace items.",
+      "requiredDocumentsImport": ["ITAR License (State Dept)", "FAA Airworthiness Certificate", "EAR/ITAR Export License", "Certificate of Origin"],
+      "antiDumpingRisk": false,
+      "keyComplianceConcerns": ["ITAR mandatory for virtually all aerospace", "Russia aviation sanctions", "FAA/EASA airworthiness"],
+      "criticalHeadings": {
+        "8802": "Aircraft — ITAR/EAR license mandatory; Russia ban",
+        "8803": "Aircraft parts — ITAR controls; Russia ban"
+      }
+    },
+    {
+      "chapter": "89",
+      "label": "Ships, Boats",
+      "dgRisk": false,
+      "exportControlRisk": "MEDIUM",
+      "sanctionsRisk": "MEDIUM",
+      "customsNotes": "ITAR controls on military vessels and dual-use maritime equipment. Russia sanctions: ships and components restricted. Flag of Convenience (FOC) vessels require careful OFAC screening. Dark fleet vessels used for sanctions evasion.",
+      "requiredDocumentsImport": ["Certificate of Origin", "Ship Registration Documents", "ITAR License if applicable"],
+      "antiDumpingRisk": false,
+      "keyComplianceConcerns": ["Russia maritime sanctions", "ITAR for military vessels", "Dark fleet/sanctions evasion via FOC"]
+    },
+    {
+      "chapter": "90",
+      "label": "Optical, Photographic, Medical/Surgical Instruments",
+      "dgRisk": false,
+      "exportControlRisk": "HIGH",
+      "sanctionsRisk": "MEDIUM",
+      "customsNotes": "Medical devices: FDA 510(k)/PMA (US), CE marking (EU), CDSCO approval (India). Optical and precision instruments: dual-use ECCN controls. Radiation-emitting devices (X-ray): licensing in many countries. Biometric surveillance tech: export controls on human rights grounds (China).",
+      "requiredDocumentsImport": ["FDA Clearance/Approval (US)", "CE Declaration of Conformity (EU)", "Export License (dual-use optical)", "Certificate of Origin"],
+      "antiDumpingRisk": true,
+      "antiDumpingNotes": "EU/US AD on Chinese optical fibres",
+      "keyComplianceConcerns": ["FDA/CE medical device approval", "Dual-use optical/precision controls", "Biometric surveillance export controls", "Radiation device licensing"]
+    },
+    {
+      "chapter": "93",
+      "label": "Arms, Ammunition, Parts",
+      "dgRisk": true,
+      "dgClass": "1",
+      "dgNotes": "Ammunition and explosives are Class 1. Some weapons components may also be Class 1.",
+      "exportControlRisk": "CRITICAL",
+      "sanctionsRisk": "CRITICAL",
+      "customsNotes": "ITAR (State Dept — Munitions List) controls virtually all items in this chapter. Foreign Military Sales (FMS) or Direct Commercial Sales (DCS) license mandatory. UN arms embargo applies to many sanctioned countries. End-user certificate essential.",
+      "requiredDocumentsImport": ["ITAR License (State Dept) — DSP-5 or DSP-73", "End-User Certificate (EUC)", "Government Import Certificate", "UN embargo clearance"],
+      "antiDumpingRisk": false,
+      "keyComplianceConcerns": ["ITAR mandatory — no exceptions", "UN arms embargo compliance", "End-user verification critical", "WMD nexus check"],
+      "criticalHeadings": {
+        "9301": "Military weapons — ITAR/USML mandatory",
+        "9302": "Revolvers and pistols — strict licensing globally",
+        "9303": "Firearms — ITAR/export license mandatory",
+        "9306": "Bombs, grenades, missiles, cartridges — ITAR mandatory"
+      }
+    },
+    {
+      "chapter": "94",
+      "label": "Furniture, Bedding, Mattresses, Lighting",
+      "dgRisk": false,
+      "exportControlRisk": "LOW",
+      "sanctionsRisk": "LOW",
+      "customsNotes": "Flammability standards compliance (UK, EU, US CPSC). California Proposition 65 compliance (US). Anti-dumping extensive on Chinese wooden furniture. Timber content subject to EUDR/Lacey Act.",
+      "requiredDocumentsImport": ["Certificate of Origin", "Flammability Test Report", "Prop 65 Compliance (California)"],
+      "antiDumpingRisk": true,
+      "antiDumpingNotes": "US AD/CVD on Chinese wooden bedroom furniture, dormitory furniture — very high duties",
+      "keyComplianceConcerns": ["Flammability compliance", "Anti-dumping (Chinese furniture — significant)", "EUDR for wood components"]
+    },
+    {
+      "chapter": "95",
+      "label": "Toys, Games, Sports Equipment",
+      "dgRisk": false,
+      "exportControlRisk": "LOW",
+      "sanctionsRisk": "LOW",
+      "customsNotes": "Strict safety requirements: EU Toy Safety Directive, US CPSC/ASTM F963. CE marking mandatory (EU). Phthalate and chemical limits (REACH). Age labelling. Country-of-origin for US. BIS certification for India.",
+      "requiredDocumentsImport": ["CE Declaration of Conformity (EU)", "CPSC/ASTM Test Report (US)", "BIS Certificate (India)", "Certificate of Origin", "Chemical compliance (REACH phthalates)"],
+      "antiDumpingRisk": false,
+      "keyComplianceConcerns": ["Toy safety standards compliance", "Chemical limits (phthalates, lead)", "Age labelling", "CE/CPSC certification"]
+    },
+    {
+      "chapter": "84-00-SEMI",
+      "label": "Semiconductor Manufacturing Equipment (Special Flag)",
+      "isSpecialFlag": true,
+      "chapter": "84",
+      "subHeadings": ["8486"],
+      "dgRisk": false,
+      "exportControlRisk": "CRITICAL",
+      "sanctionsRisk": "CRITICAL",
+      "customsNotes": "U.S. October 2022 and 2023 export control rules restrict export of advanced semiconductor manufacturing equipment to China. ECCN 3B001 (lithography), 3B002 (chip testing), 4B001 (computer-aided design tools for chips). Allied countries (Netherlands ASML, Japan Tokyo Electron) have adopted similar restrictions. No license to China for cutting-edge nodes (<16nm). End-user certificate and screening against Entity List mandatory.",
+      "requiredDocumentsImport": ["BIS Export License (mandatory for China)", "End-User Certificate", "Entity List screening clearance", "Certificate of Origin"],
+      "keyComplianceConcerns": ["BIS October 2022/2023 China chip equipment controls — CRITICAL", "ECCN 3B001/3B002 license required for China", "Entity List screening mandatory", "Netherlands/Japan allied export control alignment"]
+    }
+  ]
+}

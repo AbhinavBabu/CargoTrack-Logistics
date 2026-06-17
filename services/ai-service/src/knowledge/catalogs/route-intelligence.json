@@ -1,0 +1,865 @@
+{
+  "_catalog": {
+    "name": "CargoTrack Route Intelligence Catalog",
+    "version": "1.0.0",
+    "effectiveDate": "2024-01-01",
+    "sources": [
+      "U.S. Customs and Border Protection (CBP)",
+      "European Commission Trade Policy",
+      "UK Border Force",
+      "World Customs Organization (WCO)",
+      "OFAC Sanctions Programs",
+      "UN Security Council Resolutions",
+      "IATA Cargo Regulations",
+      "WTO Trade Facilitation Agreement"
+    ],
+    "disclaimer": "This catalog reflects trade regulations as understood at the effective date. Regulations change frequently. Always verify with official regulatory sources before making compliance decisions."
+  },
+  "corridors": [
+    {
+      "corridorId": "USA-CN",
+      "label": "United States → China",
+      "from": ["United States", "USA", "US", "United States of America"],
+      "to": ["China", "CN", "PRC", "People's Republic of China", "Mainland China"],
+      "bidirectional": true,
+      "sanctionsRisk": "ELEVATED",
+      "sanctionsNotes": "Export control restrictions under Export Administration Regulations (EAR). BIS Entity List, Military End-User List, and Unverified List screening required. Dual-use technology (ECCNs 3A, 3B, 4A, 4E, 5A, 5E) subject to BIS licensing. Huawei and affiliates on Entity List.",
+      "customsComplexity": "HIGH",
+      "estimatedClearanceHoursExport": 8,
+      "estimatedClearanceHoursImport": 72,
+      "delayProbabilityBaseline": 0.45,
+      "requiredDocumentsExport": [
+        "Commercial Invoice (with HS codes)",
+        "Packing List",
+        "Electronic Export Information (EEI / AES filing)",
+        "Certificate of Origin (Form A or CO)",
+        "Export License (if EAR-controlled goods)",
+        "Bill of Lading or Air Waybill"
+      ],
+      "requiredDocumentsImport": [
+        "Commercial Invoice",
+        "Packing List",
+        "Bill of Lading or Air Waybill",
+        "China Customs Declaration (CDF)",
+        "GACC Registration (food, agriculture, dairy)",
+        "CCC Certificate (electronics, machinery, toys)",
+        "Import License (for quota goods)"
+      ],
+      "specialRequirements": [
+        "Section 301 tariff surcharges (List 1-4B) — verify applicable HTSUS subheading",
+        "BIS Entity List screening mandatory for all parties",
+        "CITES permit required for wildlife/timber",
+        "FDA registration mandatory for food, pharma, cosmetics",
+        "REACH compliance for chemicals"
+      ],
+      "tradeAgreements": [],
+      "tariffNotes": "Most Favored Nation (MFN) rates apply + Section 301 additional tariffs 7.5%–25% on most goods",
+      "regulatoryBodies": ["U.S. BIS", "U.S. CBP", "U.S. FDA", "GACC", "SAMR", "China Customs (GACC)"],
+      "routeRestrictions": [
+        "Certain semiconductor manufacturing equipment prohibited without BIS license",
+        "Advanced AI chips (A100, H100 class) restricted to China",
+        "Military and dual-use goods require State Dept / BIS pre-approval"
+      ]
+    },
+    {
+      "corridorId": "USA-EU",
+      "label": "United States → European Union",
+      "from": ["United States", "USA", "US", "United States of America"],
+      "to": ["European Union", "EU", "Germany", "France", "Netherlands", "Belgium", "Italy", "Spain", "Poland", "Sweden", "Austria", "Denmark", "Finland", "Ireland", "Portugal", "Greece", "Czech Republic", "Romania", "Hungary", "Slovakia", "Bulgaria", "Croatia", "Slovenia", "Estonia", "Latvia", "Lithuania", "Luxembourg", "Malta", "Cyprus"],
+      "bidirectional": true,
+      "sanctionsRisk": "LOW",
+      "sanctionsNotes": "Transatlantic allies. No comprehensive sanctions. Individual party screening via OFAC SDN and EU Consolidated List still required.",
+      "customsComplexity": "MEDIUM",
+      "estimatedClearanceHoursExport": 4,
+      "estimatedClearanceHoursImport": 24,
+      "delayProbabilityBaseline": 0.15,
+      "requiredDocumentsExport": [
+        "Commercial Invoice",
+        "Packing List",
+        "Electronic Export Information (AES/EEI if >$2,500)",
+        "Bill of Lading or Air Waybill",
+        "Certificate of Origin (if preferential tariff claimed)"
+      ],
+      "requiredDocumentsImport": [
+        "Commercial Invoice",
+        "Packing List",
+        "Bill of Lading or Air Waybill",
+        "EU Customs Import Declaration (SAD/H1)",
+        "EORI Number (importer)",
+        "CE Marking Declaration (regulated products)",
+        "EUR.1 or REX Statement (for preference)"
+      ],
+      "specialRequirements": [
+        "EU Entry Summary Declaration (ICS2) required before departure",
+        "GDPR compliance for data shipments",
+        "REACH registration for chemical imports >1 tonne/year",
+        "CE marking mandatory for electronics, machinery, medical devices",
+        "Carbon Border Adjustment Mechanism (CBAM) for steel, aluminium, cement, fertilizers"
+      ],
+      "tradeAgreements": ["No comprehensive FTA (TTIP negotiations stalled)"],
+      "tariffNotes": "WTO MFN rates apply. EU Common External Tariff. 5%–6.5% on most manufactured goods.",
+      "regulatoryBodies": ["U.S. CBP", "EU DG TAXUD", "OLAF", "European Commission"],
+      "routeRestrictions": []
+    },
+    {
+      "corridorId": "USA-UK",
+      "label": "United States → United Kingdom",
+      "from": ["United States", "USA", "US"],
+      "to": ["United Kingdom", "UK", "Great Britain", "England", "Scotland", "Wales", "Northern Ireland"],
+      "bidirectional": true,
+      "sanctionsRisk": "LOW",
+      "sanctionsNotes": "Close allies. OFAC SDN and UK OFSI Consolidated List screening required for all parties.",
+      "customsComplexity": "MEDIUM",
+      "estimatedClearanceHoursExport": 4,
+      "estimatedClearanceHoursImport": 12,
+      "delayProbabilityBaseline": 0.12,
+      "requiredDocumentsExport": [
+        "Commercial Invoice",
+        "Packing List",
+        "Bill of Lading or Air Waybill",
+        "AES/EEI filing (if applicable)"
+      ],
+      "requiredDocumentsImport": [
+        "Commercial Invoice",
+        "Packing List",
+        "Bill of Lading or Air Waybill",
+        "UK Customs Declaration (CHIEF/CDS)",
+        "EORI Number (UK EORI)",
+        "UK Conformity Assessed (UKCA) marking (post-Brexit regulated products)"
+      ],
+      "specialRequirements": [
+        "Post-Brexit: No longer EU Single Market — full customs procedures apply",
+        "UKCA marking replaces CE for UK Great Britain market",
+        "CE marking still accepted until December 2024 for most goods",
+        "UK Global Tariff applies (close to EU CET)",
+        "Sanitary and Phytosanitary (SPS) checks for food and agricultural products"
+      ],
+      "tradeAgreements": ["UK-US Trade discussions ongoing (no full FTA as of 2024)"],
+      "tariffNotes": "UK Global Tariff (UKGT). Generally similar to EU CET.",
+      "regulatoryBodies": ["U.S. CBP", "UK HMRC", "UK Border Force", "OPSS"],
+      "routeRestrictions": []
+    },
+    {
+      "corridorId": "USA-MX",
+      "label": "United States ↔ Mexico",
+      "from": ["United States", "USA", "US"],
+      "to": ["Mexico", "MX", "Mexican United States"],
+      "bidirectional": true,
+      "sanctionsRisk": "LOW",
+      "sanctionsNotes": "USMCA partners. Standard OFAC SDN screening. Drug-related cartel designations exist — screen for narco-trafficking related entities.",
+      "customsComplexity": "MEDIUM",
+      "estimatedClearanceHoursExport": 2,
+      "estimatedClearanceHoursImport": 6,
+      "delayProbabilityBaseline": 0.25,
+      "requiredDocumentsExport": [
+        "Commercial Invoice",
+        "Packing List",
+        "USMCA Certificate of Origin (for preferential tariff)",
+        "Electronic Export Information (AES if applicable)",
+        "Bill of Lading or Air Waybill"
+      ],
+      "requiredDocumentsImport": [
+        "Commercial Invoice",
+        "Packing List",
+        "Pedimento (Mexican Customs Declaration)",
+        "USMCA Certificate of Origin",
+        "Bill of Lading or Air Waybill",
+        "NOM (Norma Oficial Mexicana) compliance certificate for regulated products"
+      ],
+      "specialRequirements": [
+        "USMCA Rules of Origin verification critical — confirm regional value content",
+        "Maquiladora/IMMEX program considerations for manufacturing imports",
+        "Pre-arrival messaging system (PAMS) for cargo security",
+        "NOM certification mandatory for electronics, food, cosmetics, textiles"
+      ],
+      "tradeAgreements": ["USMCA (United States-Mexico-Canada Agreement)"],
+      "tariffNotes": "USMCA eliminates tariffs on qualifying originating goods. Most goods qualify for 0% under USMCA.",
+      "regulatoryBodies": ["U.S. CBP", "SAT/Aduanas Mexico", "COFEPRIS (food/pharma)"],
+      "routeRestrictions": [
+        "Certain agricultural goods subject to TRQs under USMCA"
+      ]
+    },
+    {
+      "corridorId": "USA-CA",
+      "label": "United States ↔ Canada",
+      "from": ["United States", "USA", "US"],
+      "to": ["Canada", "CA"],
+      "bidirectional": true,
+      "sanctionsRisk": "LOW",
+      "sanctionsNotes": "USMCA partners. Standard party screening via OFAC and CBSA watch lists.",
+      "customsComplexity": "LOW",
+      "estimatedClearanceHoursExport": 1,
+      "estimatedClearanceHoursImport": 2,
+      "delayProbabilityBaseline": 0.08,
+      "requiredDocumentsExport": [
+        "Commercial Invoice (with HS codes)",
+        "Packing List",
+        "USMCA Certificate of Origin",
+        "Canada Customs Invoice (CCI) for commercial shipments"
+      ],
+      "requiredDocumentsImport": [
+        "Commercial Invoice",
+        "Canada Customs Coding Form (B3)",
+        "USMCA Certificate of Origin",
+        "Packing List"
+      ],
+      "specialRequirements": [
+        "CUSMA/USMCA qualification for duty-free treatment",
+        "Food safety: CFIA import requirements for food products",
+        "Health Canada requirements for pharma/health products"
+      ],
+      "tradeAgreements": ["USMCA (United States-Mexico-Canada Agreement)"],
+      "tariffNotes": "USMCA eliminates tariffs on qualifying originating goods.",
+      "regulatoryBodies": ["U.S. CBP", "CBSA", "CFIA", "Health Canada"],
+      "routeRestrictions": []
+    },
+    {
+      "corridorId": "EU-CN",
+      "label": "European Union → China",
+      "from": ["European Union", "EU", "Germany", "France", "Netherlands", "Belgium", "Italy", "Spain", "Poland"],
+      "to": ["China", "CN", "PRC", "People's Republic of China"],
+      "bidirectional": true,
+      "sanctionsRisk": "ELEVATED",
+      "sanctionsNotes": "EU-China Comprehensive Agreement on Investment (CAI) suspended (2021). EU dual-use export controls apply. Russian war-related sanctions — scrutinize transshipment via China. BIS Entity List screening for US-content goods.",
+      "customsComplexity": "HIGH",
+      "estimatedClearanceHoursExport": 8,
+      "estimatedClearanceHoursImport": 72,
+      "delayProbabilityBaseline": 0.40,
+      "requiredDocumentsExport": [
+        "Commercial Invoice",
+        "Packing List",
+        "EU Export Declaration (EX-A)",
+        "Certificate of Origin",
+        "EU Export License (dual-use goods)",
+        "Bill of Lading or Air Waybill"
+      ],
+      "requiredDocumentsImport": [
+        "Commercial Invoice",
+        "Packing List",
+        "China Customs Declaration",
+        "GACC Registration (food/ag)",
+        "CCC Certificate",
+        "Bill of Lading or Air Waybill"
+      ],
+      "specialRequirements": [
+        "EU Dual-Use Regulation (EU) 2021/821 — license required for controlled items",
+        "Anti-dumping duties on steel, solar panels, e-bikes from China",
+        "CBAM applies to Chinese steel/aluminium/fertilizers/cement",
+        "Huawei-related supply chain scrutiny"
+      ],
+      "tradeAgreements": ["No FTA — WTO MFN terms"],
+      "tariffNotes": "EU Common External Tariff + anti-dumping duties on many Chinese goods.",
+      "regulatoryBodies": ["European Commission DG TAXUD", "GACC", "SAMR"],
+      "routeRestrictions": [
+        "Dual-use goods require EU export license",
+        "Russia circumvention risk via China — monitor for re-export potential"
+      ]
+    },
+    {
+      "corridorId": "UK-EU",
+      "label": "United Kingdom ↔ European Union (Post-Brexit)",
+      "from": ["United Kingdom", "UK", "Great Britain", "England", "Scotland", "Wales"],
+      "to": ["European Union", "EU", "Germany", "France", "Netherlands", "Belgium", "Italy", "Spain", "Poland", "Ireland"],
+      "bidirectional": true,
+      "sanctionsRisk": "LOW",
+      "sanctionsNotes": "Allies. Standard party screening. UK OFSI and EU Consolidated List checks required.",
+      "customsComplexity": "HIGH",
+      "estimatedClearanceHoursExport": 8,
+      "estimatedClearanceHoursImport": 12,
+      "delayProbabilityBaseline": 0.35,
+      "requiredDocumentsExport": [
+        "Commercial Invoice",
+        "Packing List",
+        "UK Export Declaration (CHIEF/CDS)",
+        "UK EORI Number",
+        "UK Customs Tariff classification",
+        "Bill of Lading or Air Waybill",
+        "Rules of Origin proof (UK-EU TCA)"
+      ],
+      "requiredDocumentsImport": [
+        "Commercial Invoice",
+        "Packing List",
+        "EU Customs Import Declaration",
+        "EU EORI Number",
+        "EUR.1 or Statement on Origin (for TCA preferential rate)",
+        "Bill of Lading or Air Waybill",
+        "SPS certificates (for food, plants, animals)"
+      ],
+      "specialRequirements": [
+        "UK-EU TCA requires proof of UK/EU originating content for zero-tariff treatment",
+        "Rules of Origin: typically 50-55% regional value content required",
+        "Northern Ireland Protocol: NI remains in EU single market for goods",
+        "SPS border checks: full import controls for food/animal products",
+        "UKCA vs CE marking divergence ongoing"
+      ],
+      "tradeAgreements": ["UK-EU Trade and Cooperation Agreement (TCA)"],
+      "tariffNotes": "Zero tariff for qualifying originating goods under TCA. Non-originating goods face EU CET / UK Global Tariff.",
+      "regulatoryBodies": ["UK HMRC", "EU DG TAXUD", "UK Border Force", "APHA (SPS)"],
+      "routeRestrictions": [
+        "Full customs formalities — no longer single market",
+        "Ireland: complex routing; NI Protocol applies for goods moving NI-EU"
+      ]
+    },
+    {
+      "corridorId": "SG-ASEAN",
+      "label": "Singapore → ASEAN (Intra-ASEAN)",
+      "from": ["Singapore", "SG"],
+      "to": ["Malaysia", "Thailand", "Indonesia", "Vietnam", "Philippines", "Myanmar", "Cambodia", "Laos", "Brunei", "ASEAN"],
+      "bidirectional": true,
+      "sanctionsRisk": "LOW",
+      "sanctionsNotes": "Intra-ASEAN trade generally clear. Myanmar: targeted sanctions by US/EU/UK on military-related entities. Screen all parties against OFAC SDN.",
+      "customsComplexity": "MEDIUM",
+      "estimatedClearanceHoursExport": 4,
+      "estimatedClearanceHoursImport": 12,
+      "delayProbabilityBaseline": 0.20,
+      "requiredDocumentsExport": [
+        "Commercial Invoice",
+        "Packing List",
+        "ASEAN Trade in Goods Agreement (ATIGA) Form D (for preferential tariff)",
+        "Bill of Lading or Air Waybill",
+        "Certificate of Origin"
+      ],
+      "requiredDocumentsImport": [
+        "Commercial Invoice",
+        "Packing List",
+        "Import Declaration",
+        "ATIGA Form D (for ASEAN preference)",
+        "Bill of Lading or Air Waybill"
+      ],
+      "specialRequirements": [
+        "ATIGA Form D for ASEAN preferential tariff rates (average 0-5%)",
+        "RCEP Certificate of Origin for additional preferences",
+        "Myanmar: human rights due diligence required — military entity connections",
+        "Halal certification for food goods to Malaysia/Indonesia/Brunei"
+      ],
+      "tradeAgreements": ["ASEAN Free Trade Area (AFTA/ATIGA)", "RCEP (Regional Comprehensive Economic Partnership)"],
+      "tariffNotes": "ATIGA: most tariff lines at 0% for ASEAN-origin goods. Non-ASEAN goods face MFN rates.",
+      "regulatoryBodies": ["Singapore Customs", "Country-specific customs authorities"],
+      "routeRestrictions": []
+    },
+    {
+      "corridorId": "UAE-IN",
+      "label": "UAE ↔ India",
+      "from": ["United Arab Emirates", "UAE", "Dubai", "Abu Dhabi", "Sharjah"],
+      "to": ["India", "IN"],
+      "bidirectional": true,
+      "sanctionsRisk": "MEDIUM",
+      "sanctionsNotes": "UAE is a known transshipment hub for sanctions evasion (Iran, Russia). Screen all UAE-based intermediaries carefully. India maintains strategic autonomy and trades with sanctioned countries — verify ultimate consignee/end-use.",
+      "customsComplexity": "MEDIUM",
+      "estimatedClearanceHoursExport": 6,
+      "estimatedClearanceHoursImport": 24,
+      "delayProbabilityBaseline": 0.30,
+      "requiredDocumentsExport": [
+        "Commercial Invoice",
+        "Packing List",
+        "Certificate of Origin (CEPA Form for preferential rate)",
+        "Bill of Lading or Air Waybill",
+        "Packing Declaration"
+      ],
+      "requiredDocumentsImport": [
+        "Commercial Invoice",
+        "Packing List",
+        "Bill of Entry (India)",
+        "CEPA Certificate of Origin (India-UAE CEPA)",
+        "Bill of Lading or Air Waybill",
+        "Import License (for restricted items)",
+        "BIS/ISI Certificate (for electronics, toys)"
+      ],
+      "specialRequirements": [
+        "India-UAE CEPA (2022) — preferential rates for qualifying goods",
+        "BIS (Bureau of Indian Standards) mandatory for electronics, toys, steel",
+        "FSSAI registration for food imports",
+        "Drug Controller General approval for pharma",
+        "UAE: Dubai is major re-export hub — verify goods actually originate in UAE for CEPA benefit"
+      ],
+      "tradeAgreements": ["India-UAE Comprehensive Economic Partnership Agreement (CEPA)"],
+      "tariffNotes": "India applies relatively high MFN tariffs (avg 18%). CEPA provides significant reductions.",
+      "regulatoryBodies": ["UAE Federal Customs Authority", "India CBIC", "FSSAI", "BIS"],
+      "routeRestrictions": [
+        "UAE transshipment risk for Iran/Russia sanctions — enhanced due diligence required"
+      ]
+    },
+    {
+      "corridorId": "CN-IN",
+      "label": "China → India",
+      "from": ["China", "CN", "PRC"],
+      "to": ["India", "IN"],
+      "bidirectional": true,
+      "sanctionsRisk": "MEDIUM",
+      "sanctionsNotes": "Geopolitical tensions post-2020 Galwan. India has banned several Chinese apps/tech. Screen for dual-use and national security concerns.",
+      "customsComplexity": "HIGH",
+      "estimatedClearanceHoursExport": 12,
+      "estimatedClearanceHoursImport": 48,
+      "delayProbabilityBaseline": 0.50,
+      "requiredDocumentsExport": [
+        "Commercial Invoice",
+        "Packing List",
+        "China Customs Declaration",
+        "Certificate of Origin",
+        "Bill of Lading or Air Waybill"
+      ],
+      "requiredDocumentsImport": [
+        "Commercial Invoice",
+        "Packing List",
+        "Bill of Entry (India)",
+        "Certificate of Origin",
+        "Bill of Lading or Air Waybill",
+        "Import License (for specific restricted categories)",
+        "BIS Certificate (electronics)"
+      ],
+      "specialRequirements": [
+        "India FDI restrictions: Chinese FDI requires government approval (Press Note 3/2020)",
+        "Anti-dumping duties on many Chinese goods (steel, solar, chemicals, textiles)",
+        "BIS mandatory certification for electronics — often not pre-certified by Chinese manufacturers",
+        "Enhanced customs scrutiny for China-origin goods",
+        "No bilateral FTA — WTO MFN rates apply (often high for India)"
+      ],
+      "tradeAgreements": ["No FTA — WTO MFN"],
+      "tariffNotes": "India's average applied MFN tariff ~18% + anti-dumping duties on many categories.",
+      "regulatoryBodies": ["GACC", "India CBIC", "DPIIT", "BIS"],
+      "routeRestrictions": [
+        "Technology goods: heightened scrutiny for national security concerns",
+        "Some Chinese goods require prior import approval"
+      ]
+    },
+    {
+      "corridorId": "UAE-EU",
+      "label": "UAE → European Union",
+      "from": ["United Arab Emirates", "UAE", "Dubai", "Abu Dhabi"],
+      "to": ["European Union", "EU", "Germany", "France", "Netherlands", "Italy"],
+      "bidirectional": true,
+      "sanctionsRisk": "MEDIUM",
+      "sanctionsNotes": "UAE-based intermediaries frequently used for Russia sanctions evasion. Screen for dual nationality/beneficial ownership. UAE on FATF grey list (periodically). Verify goods truly originate in UAE.",
+      "customsComplexity": "MEDIUM",
+      "estimatedClearanceHoursExport": 6,
+      "estimatedClearanceHoursImport": 24,
+      "delayProbabilityBaseline": 0.25,
+      "requiredDocumentsExport": [
+        "Commercial Invoice",
+        "Packing List",
+        "Certificate of Origin",
+        "Bill of Lading or Air Waybill"
+      ],
+      "requiredDocumentsImport": [
+        "Commercial Invoice",
+        "Packing List",
+        "EU Customs Import Declaration",
+        "EU EORI Number",
+        "Certificate of Origin",
+        "Bill of Lading or Air Waybill"
+      ],
+      "specialRequirements": [
+        "Russia sanctions: verify goods are not transshipping through UAE to Russia",
+        "Anti-money laundering: UAE financial sector scrutiny",
+        "REACH compliance for chemicals",
+        "CE marking for regulated products"
+      ],
+      "tradeAgreements": ["EU-GCC FTA under negotiation (not yet in force as of 2024)"],
+      "tariffNotes": "EU Common External Tariff applies. No preferential rates currently.",
+      "regulatoryBodies": ["UAE Federal Customs Authority", "EU DG TAXUD", "OLAF"],
+      "routeRestrictions": []
+    },
+    {
+      "corridorId": "USA-RU",
+      "label": "United States → Russia",
+      "from": ["United States", "USA", "US"],
+      "to": ["Russia", "RU", "Russian Federation"],
+      "bidirectional": true,
+      "sanctionsRisk": "CRITICAL",
+      "sanctionsNotes": "Comprehensive U.S. sanctions in response to Ukraine invasion. Most goods prohibited. OFAC authorizes very limited exceptions (food, medicine). BIS has restricted virtually all exports. Russia on BIS List. Do NOT process without explicit OFAC/BIS license.",
+      "customsComplexity": "HIGH",
+      "estimatedClearanceHoursExport": 999,
+      "estimatedClearanceHoursImport": 999,
+      "delayProbabilityBaseline": 0.99,
+      "requiredDocumentsExport": [
+        "OFAC General or Specific License (mandatory)",
+        "BIS Export License (mandatory for virtually all goods)",
+        "Commercial Invoice",
+        "Packing List"
+      ],
+      "requiredDocumentsImport": [
+        "Applicable import documentation",
+        "Evidence of OFAC/BIS authorization"
+      ],
+      "specialRequirements": [
+        "COMPREHENSIVE SANCTIONS — HALT for compliance review before any action",
+        "EAR99 goods also restricted under Russia/Belarus Sanctions Rule (March 2022)",
+        "No U.S. person may facilitate transactions involving Russia without OFAC license",
+        "Secondary sanctions risk for facilitators"
+      ],
+      "tradeAgreements": [],
+      "tariffNotes": "Russia suspended from Normal Trade Relations (NTR) / Most Favored Nation status by U.S.",
+      "regulatoryBodies": ["OFAC", "U.S. BIS", "U.S. State Dept"],
+      "routeRestrictions": [
+        "BLOCKED: Virtually all goods require OFAC/BIS license",
+        "Secondary sanctions apply to third-country facilitators"
+      ]
+    },
+    {
+      "corridorId": "USA-IR",
+      "label": "United States → Iran",
+      "from": ["United States", "USA", "US"],
+      "to": ["Iran", "IR", "Islamic Republic of Iran"],
+      "bidirectional": true,
+      "sanctionsRisk": "CRITICAL",
+      "sanctionsNotes": "COMPREHENSIVE OFAC sanctions. Most transactions with Iran are prohibited. Limited exceptions: food, medicine, agricultural commodities (TSRA General License), personal communications. ITSR (Iranian Transactions and Sanctions Regulations) apply.",
+      "customsComplexity": "HIGH",
+      "estimatedClearanceHoursExport": 999,
+      "estimatedClearanceHoursImport": 999,
+      "delayProbabilityBaseline": 0.99,
+      "requiredDocumentsExport": [
+        "OFAC Specific License (for most goods)",
+        "OFAC General License documentation (for exempt categories)"
+      ],
+      "requiredDocumentsImport": ["Not applicable — importation from Iran to US generally prohibited"],
+      "specialRequirements": [
+        "COMPREHENSIVE SANCTIONS — HALT immediately for compliance review",
+        "ITSR prohibits most U.S. person transactions with Iran",
+        "Third-country banks may refuse USD transactions touching Iran",
+        "Secondary sanctions risk: non-U.S. persons assisting Iran sanctions evasion"
+      ],
+      "tradeAgreements": [],
+      "tariffNotes": "Iran not eligible for U.S. tariff treatment.",
+      "regulatoryBodies": ["OFAC", "U.S. BIS"],
+      "routeRestrictions": ["BLOCKED: Comprehensive sanctions"]
+    },
+    {
+      "corridorId": "USA-DPRK",
+      "label": "United States → North Korea",
+      "from": ["United States", "USA", "US"],
+      "to": ["North Korea", "DPRK", "Democratic People's Republic of Korea", "KP"],
+      "bidirectional": true,
+      "sanctionsRisk": "CRITICAL",
+      "sanctionsNotes": "COMPREHENSIVE U.S. and UN sanctions. Trading with North Korea is effectively prohibited. UN Security Council has imposed near-total trade embargo. No goods, services, or technology permitted without specific OFAC authorization.",
+      "customsComplexity": "HIGH",
+      "estimatedClearanceHoursExport": 999,
+      "estimatedClearanceHoursImport": 999,
+      "delayProbabilityBaseline": 0.99,
+      "requiredDocumentsExport": ["OFAC Specific License (virtually unavailable)"],
+      "requiredDocumentsImport": ["Prohibited"],
+      "specialRequirements": ["COMPREHENSIVE SANCTIONS — Do NOT process under any circumstances without OFAC authorization"],
+      "tradeAgreements": [],
+      "tariffNotes": "North Korea ineligible for U.S. tariff treatment.",
+      "regulatoryBodies": ["OFAC", "UN Security Council"],
+      "routeRestrictions": ["BLOCKED: Comprehensive UN and U.S. sanctions"]
+    },
+    {
+      "corridorId": "EU-RU",
+      "label": "European Union → Russia",
+      "from": ["European Union", "EU", "Germany", "France", "Netherlands", "Italy", "Poland"],
+      "to": ["Russia", "RU", "Russian Federation"],
+      "bidirectional": true,
+      "sanctionsRisk": "CRITICAL",
+      "sanctionsNotes": "EU has imposed 14 packages of sanctions on Russia since 2022. Comprehensive restrictions on goods, technology, finance, transport. Most goods prohibited. Anti-circumvention rules apply — goods cannot transit through third countries to reach Russia.",
+      "customsComplexity": "HIGH",
+      "estimatedClearanceHoursExport": 999,
+      "estimatedClearanceHoursImport": 999,
+      "delayProbabilityBaseline": 0.99,
+      "requiredDocumentsExport": ["EU authorization (extremely limited)"],
+      "requiredDocumentsImport": ["Most Russian goods banned from EU import"],
+      "specialRequirements": [
+        "COMPREHENSIVE SANCTIONS — HALT for compliance review",
+        "EU anti-circumvention rules: cannot use UAE, Turkey, Armenia, Georgia as transit",
+        "500+ listed individuals and entities fully frozen"
+      ],
+      "tradeAgreements": [],
+      "tariffNotes": "Russia removed from EU MFN status.",
+      "regulatoryBodies": ["European Commission", "EU Member State authorities"],
+      "routeRestrictions": ["BLOCKED: 14 packages of EU sanctions"]
+    },
+    {
+      "corridorId": "UK-IN",
+      "label": "United Kingdom → India",
+      "from": ["United Kingdom", "UK", "Great Britain"],
+      "to": ["India", "IN"],
+      "bidirectional": true,
+      "sanctionsRisk": "LOW",
+      "sanctionsNotes": "No comprehensive sanctions. Standard party screening via OFAC SDN and UK OFSI.",
+      "customsComplexity": "MEDIUM",
+      "estimatedClearanceHoursExport": 6,
+      "estimatedClearanceHoursImport": 24,
+      "delayProbabilityBaseline": 0.25,
+      "requiredDocumentsExport": [
+        "Commercial Invoice",
+        "Packing List",
+        "Certificate of Origin",
+        "Bill of Lading or Air Waybill",
+        "UK Export Customs Declaration"
+      ],
+      "requiredDocumentsImport": [
+        "Commercial Invoice",
+        "Packing List",
+        "Bill of Entry (India)",
+        "Certificate of Origin (for GSP/DFIA)",
+        "Bill of Lading or Air Waybill",
+        "BIS Certificate (electronics, toys)"
+      ],
+      "specialRequirements": [
+        "UK-India FTA under negotiation (not concluded as of 2024)",
+        "India applies GSP to developing country origin goods — UK no longer qualifies as developing",
+        "BIS mandatory for electronics, steel products",
+        "FSSAI for food imports"
+      ],
+      "tradeAgreements": ["UK-India FTA under negotiation"],
+      "tariffNotes": "India MFN rates apply (avg 18%). No preferential rate currently.",
+      "regulatoryBodies": ["UK HMRC", "India CBIC", "BIS", "FSSAI"],
+      "routeRestrictions": []
+    },
+    {
+      "corridorId": "SG-CN",
+      "label": "Singapore → China",
+      "from": ["Singapore", "SG"],
+      "to": ["China", "CN", "PRC"],
+      "bidirectional": true,
+      "sanctionsRisk": "MEDIUM",
+      "sanctionsNotes": "China export controls apply. BIS Entity List screening for goods with US content. Singapore is a key re-export hub — verify actual origin of goods for US-content rules.",
+      "customsComplexity": "MEDIUM",
+      "estimatedClearanceHoursExport": 4,
+      "estimatedClearanceHoursImport": 48,
+      "delayProbabilityBaseline": 0.30,
+      "requiredDocumentsExport": [
+        "Commercial Invoice",
+        "Packing List",
+        "Certificate of Origin (Form E for ASEAN-China FTA)",
+        "Bill of Lading or Air Waybill",
+        "Export Permit (for controlled goods — Singapore Customs)"
+      ],
+      "requiredDocumentsImport": [
+        "Commercial Invoice",
+        "Packing List",
+        "China Customs Declaration",
+        "Certificate of Origin (Form E)",
+        "GACC Registration (food)",
+        "CCC Certificate (electronics)"
+      ],
+      "specialRequirements": [
+        "ASEAN-China FTA Form E for preferential rates",
+        "Singapore Strategic Goods Control Act — re-export of controlled goods requires permit",
+        "Semiconductor equipment: heightened scrutiny due to US export control extraterritorial reach",
+        "Verify no US-origin content restrictions apply"
+      ],
+      "tradeAgreements": ["ASEAN-China FTA (ACFTA)", "RCEP"],
+      "tariffNotes": "ACFTA Form E provides preferential rates. Most ASEAN-origin goods qualify for reduced China tariffs.",
+      "regulatoryBodies": ["Singapore Customs", "GACC", "SAMR"],
+      "routeRestrictions": []
+    },
+    {
+      "corridorId": "JP-USA",
+      "label": "Japan ↔ United States",
+      "from": ["Japan", "JP"],
+      "to": ["United States", "USA", "US"],
+      "bidirectional": true,
+      "sanctionsRisk": "LOW",
+      "sanctionsNotes": "Close allies. Standard party screening via OFAC SDN. Japan maintains independent export controls (FEFTA) aligned with allied frameworks.",
+      "customsComplexity": "MEDIUM",
+      "estimatedClearanceHoursExport": 4,
+      "estimatedClearanceHoursImport": 8,
+      "delayProbabilityBaseline": 0.12,
+      "requiredDocumentsExport": [
+        "Commercial Invoice",
+        "Packing List",
+        "Japan Customs Export Declaration",
+        "Certificate of Origin (for JUSTA preference claims)",
+        "Bill of Lading or Air Waybill",
+        "METI Export License (controlled goods)"
+      ],
+      "requiredDocumentsImport": [
+        "Commercial Invoice",
+        "Packing List",
+        "U.S. Customs Entry (formal if >$2,500)",
+        "Bill of Lading or Air Waybill",
+        "FDA documentation (food, pharma)"
+      ],
+      "specialRequirements": [
+        "Japan-U.S. Trade Agreement (2020) — limited coverage, not comprehensive FTA",
+        "Section 232 tariffs: steel 25%, aluminium 10% (some exemptions for Japan)",
+        "Japan semiconductor export controls aligned with US BIS rules"
+      ],
+      "tradeAgreements": ["Japan-U.S. Trade Agreement (partial)"],
+      "tariffNotes": "MFN rates generally apply. Japan-US agreement covers select agricultural and industrial goods.",
+      "regulatoryBodies": ["Japan Customs", "METI", "U.S. CBP"],
+      "routeRestrictions": []
+    },
+    {
+      "corridorId": "KR-USA",
+      "label": "Korea ↔ United States",
+      "from": ["South Korea", "Korea", "Republic of Korea", "KR"],
+      "to": ["United States", "USA", "US"],
+      "bidirectional": true,
+      "sanctionsRisk": "LOW",
+      "sanctionsNotes": "Close allies. Standard party screening via OFAC SDN. KORUS FTA in force.",
+      "customsComplexity": "LOW",
+      "estimatedClearanceHoursExport": 4,
+      "estimatedClearanceHoursImport": 8,
+      "delayProbabilityBaseline": 0.10,
+      "requiredDocumentsExport": [
+        "Commercial Invoice",
+        "Packing List",
+        "KORUS Certificate of Origin",
+        "Bill of Lading or Air Waybill"
+      ],
+      "requiredDocumentsImport": [
+        "Commercial Invoice",
+        "Packing List",
+        "KORUS Certificate of Origin (for duty reduction)",
+        "U.S. Customs Entry",
+        "Bill of Lading or Air Waybill"
+      ],
+      "specialRequirements": [
+        "KORUS FTA origin requirements: regional value content verification",
+        "ITA obligations: no tariffs on tech/semiconductors",
+        "Automotive: tariff phase-out schedule applies"
+      ],
+      "tradeAgreements": ["KORUS FTA (Korea-US FTA)"],
+      "tariffNotes": "KORUS eliminates most tariffs. Key sectors: electronics, machinery at 0%.",
+      "regulatoryBodies": ["Korea Customs Service", "U.S. CBP"],
+      "routeRestrictions": []
+    },
+    {
+      "corridorId": "AU-CN",
+      "label": "Australia → China",
+      "from": ["Australia", "AU"],
+      "to": ["China", "CN", "PRC"],
+      "bidirectional": true,
+      "sanctionsRisk": "ELEVATED",
+      "sanctionsNotes": "Australia-China relations strained (2020-2023 trade disputes largely resolved). China imposed unofficial bans on Australian coal, wine, barley, beef — most lifted by 2023. BIS Entity List screening for US-content goods. Ongoing geopolitical caution.",
+      "customsComplexity": "MEDIUM",
+      "estimatedClearanceHoursExport": 6,
+      "estimatedClearanceHoursImport": 48,
+      "delayProbabilityBaseline": 0.35,
+      "requiredDocumentsExport": [
+        "Commercial Invoice",
+        "Packing List",
+        "ChAFTA Certificate of Origin (Form for China-Australia FTA)",
+        "Phytosanitary Certificate (agricultural goods)",
+        "Bill of Lading or Air Waybill"
+      ],
+      "requiredDocumentsImport": [
+        "Commercial Invoice",
+        "Packing List",
+        "China Customs Declaration",
+        "ChAFTA Certificate of Origin",
+        "GACC Registration (food/ag)",
+        "Bill of Lading or Air Waybill"
+      ],
+      "specialRequirements": [
+        "China-Australia FTA (ChAFTA) — preferential rates, tariff elimination schedule",
+        "Agricultural trade: monitor for informal restrictions",
+        "FIRB approval for Chinese investment in Australian assets",
+        "Critical minerals: heightened political scrutiny"
+      ],
+      "tradeAgreements": ["China-Australia FTA (ChAFTA)", "RCEP"],
+      "tariffNotes": "ChAFTA provides significant tariff reductions. Most agricultural and resource goods at 0%.",
+      "regulatoryBodies": ["Australian Border Force", "DAFF", "GACC"],
+      "routeRestrictions": []
+    },
+    {
+      "corridorId": "IN-EU",
+      "label": "India → European Union",
+      "from": ["India", "IN"],
+      "to": ["European Union", "EU", "Germany", "France", "Netherlands", "Belgium", "Italy"],
+      "bidirectional": true,
+      "sanctionsRisk": "LOW",
+      "sanctionsNotes": "No comprehensive sanctions. Standard party screening. India-Russia trade: EU may scrutinize Indian re-exports with Russian content.",
+      "customsComplexity": "MEDIUM",
+      "estimatedClearanceHoursExport": 6,
+      "estimatedClearanceHoursImport": 24,
+      "delayProbabilityBaseline": 0.25,
+      "requiredDocumentsExport": [
+        "Commercial Invoice",
+        "Packing List",
+        "Certificate of Origin (for GSP preference)",
+        "Bill of Lading or Air Waybill",
+        "India Export Declaration"
+      ],
+      "requiredDocumentsImport": [
+        "Commercial Invoice",
+        "Packing List",
+        "EU Customs Import Declaration",
+        "GSP Form A (for preference) / REX Statement",
+        "Bill of Lading or Air Waybill",
+        "CE Marking documentation"
+      ],
+      "specialRequirements": [
+        "EU GSP (Generalized System of Preferences) — India qualifies for preferential rates",
+        "India-EU FTA under negotiation (not concluded 2024)",
+        "REACH compliance for chemicals",
+        "CE marking for regulated products",
+        "Anti-dumping: EU AD duties on some Indian steel, textiles"
+      ],
+      "tradeAgreements": ["EU GSP for India (preference scheme)", "India-EU FTA under negotiation"],
+      "tariffNotes": "India benefits from EU GSP preferential rates. EU CET applies to non-GSP goods.",
+      "regulatoryBodies": ["EU DG TAXUD", "India CBIC"],
+      "routeRestrictions": []
+    },
+    {
+      "corridorId": "DOMESTIC",
+      "label": "Domestic (Same Country)",
+      "from": ["DOMESTIC"],
+      "to": ["DOMESTIC"],
+      "bidirectional": true,
+      "sanctionsRisk": "LOW",
+      "sanctionsNotes": "Standard domestic party screening applies. OFAC SDN list screening required for all transactions.",
+      "customsComplexity": "LOW",
+      "estimatedClearanceHoursExport": 0,
+      "estimatedClearanceHoursImport": 0,
+      "delayProbabilityBaseline": 0.05,
+      "requiredDocumentsExport": [
+        "Commercial Invoice",
+        "Packing List",
+        "Bill of Lading or Waybill",
+        "Proof of Delivery"
+      ],
+      "requiredDocumentsImport": [
+        "Commercial Invoice",
+        "Packing List",
+        "Delivery Receipt"
+      ],
+      "specialRequirements": [
+        "No customs clearance required",
+        "DG goods require carrier compliance with domestic DG regulations",
+        "HAZMAT placarding for road transport (if DG)"
+      ],
+      "tradeAgreements": [],
+      "tariffNotes": "No import duties.",
+      "regulatoryBodies": ["Domestic transport authority"],
+      "routeRestrictions": []
+    },
+    {
+      "corridorId": "INTERNATIONAL-GENERIC",
+      "label": "International (Generic)",
+      "from": ["INTERNATIONAL"],
+      "to": ["INTERNATIONAL"],
+      "bidirectional": true,
+      "sanctionsRisk": "MEDIUM",
+      "sanctionsNotes": "Unknown corridor. Standard party screening via OFAC SDN, EU Consolidated List, and UN Security Council list required. Additional screening recommended.",
+      "customsComplexity": "MEDIUM",
+      "estimatedClearanceHoursExport": 8,
+      "estimatedClearanceHoursImport": 24,
+      "delayProbabilityBaseline": 0.25,
+      "requiredDocumentsExport": [
+        "Commercial Invoice",
+        "Packing List",
+        "Certificate of Origin",
+        "Bill of Lading or Air Waybill",
+        "Export Customs Declaration"
+      ],
+      "requiredDocumentsImport": [
+        "Commercial Invoice",
+        "Packing List",
+        "Import Customs Declaration",
+        "Certificate of Origin",
+        "Bill of Lading or Air Waybill"
+      ],
+      "specialRequirements": [
+        "Verify applicable bilateral or regional trade agreements",
+        "Consult destination country customs authority for specific requirements",
+        "Screen all parties against OFAC, UN, and EU sanctions lists"
+      ],
+      "tradeAgreements": [],
+      "tariffNotes": "Destination country MFN tariffs apply unless FTA qualifies goods for preference.",
+      "regulatoryBodies": ["Origin country customs", "Destination country customs"],
+      "routeRestrictions": []
+    }
+  ]
+}

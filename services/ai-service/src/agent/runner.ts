@@ -29,6 +29,7 @@ import { config } from '../config';
 import { COMPLIANCE_AGENT_TOOLS, ComplianceTriggerMessage } from './contracts';
 import { AgentTools } from './tools';
 import { CopilotEngine } from '../copilot/engine';
+import KnowledgeBase from '../knowledge/knowledge-base';
 
 // ─── Bedrock client ───────────────────────────────────────────────────────────
 
@@ -48,6 +49,9 @@ const MAX_ITERATIONS = 20;
 // This is what makes it genuinely AI-driven: Nova's judgment determines the
 // assessment, not a predefined procedure.
 
+// The static SYSTEM_PROMPT provides the agent's persona and analytical mandate.
+// A per-shipment catalog context block is prepended to the FIRST user message
+// at runtime (see buildCatalogContextHeader below).
 const SYSTEM_PROMPT = `You are the CargoTrack Shipment Risk Intelligence Agent — a senior logistics compliance analyst with deep expertise in:
 - International trade compliance and customs law
 - Export control regulations (EAR, ITAR, EU dual-use)
@@ -135,7 +139,52 @@ RISK SCORING:
   0.0–0.25 = LOW (standard monitoring), 0.26–0.50 = MEDIUM (attention needed),
   0.51–0.75 = HIGH (hold for review), 0.76–1.0 = CRITICAL (escalate immediately)
 - risk_level must match the score band above
-- model_confidence: your overall confidence in the assessment given available evidence`;
+- model_confidence: your overall confidence in the assessment given available evidence
+
+KNOWLEDGE BASE GROUNDING:
+You will receive CATALOG-GROUNDED CONTEXT at the start of each assessment.
+This context is loaded from our logistics intelligence knowledge base (route intelligence,
+sanctions watch, dangerous goods, HS code, and Incoterms catalogs).
+
+You MUST:
+1. Treat catalog data as authoritative — do not contradict it
+2. Reference specific catalog findings in your reasoning (e.g., 'per catalog: USA→China BIS Entity List screening required')
+3. Use catalog-specified required documents when assessing document completeness
+4. Apply catalog-identified sanctions risk levels — if catalog says CRITICAL, do not assess as LOW
+5. Include the knowledge sources in your executive summary (the catalog version and confidence level)`;
+
+
+// ─── Build per-shipment catalog context header ────────────────────────────────
+//
+// Called once per compliance run, before the first Nova invocation.
+// Returns a formatted string ready to prepend to the user message.
+
+async function buildCatalogContextHeader(shipmentId: string, tools: AgentTools): Promise<string> {
+  try {
+    const shipment = await tools.getShipment(shipmentId);
+    if (!shipment) return '';
+
+    const ctx = KnowledgeBase.buildGroundedContext({
+      origin:          shipment.origin,
+      destination:     shipment.destination,
+      commodityType:   shipment.commodityType,
+      description:     undefined,
+      hsCodeHint:      shipment.hsCodeHint,
+      incoterms:       shipment.incoterms,
+      isDangerousGoods: shipment.isDangerousGoods,
+      shipmentType:    shipment.shipmentType,
+    });
+
+    const formatted = KnowledgeBase.formatContextForPrompt(ctx, shipment);
+
+    console.log(`[Runner] Catalog context loaded — corridor: ${ctx.route.corridorId}, sanctions: ${ctx.sanctions.destinationRisk}, knowledge confidence: ${ctx.knowledgeConfidence}, sources: ${ctx.knowledgeSources.length}`);
+
+    return formatted;
+  } catch (err) {
+    console.warn('[Runner] Could not build catalog context — proceeding without grounding:', err);
+    return '';
+  }
+}
 
 
 // ─── Tool dispatcher ──────────────────────────────────────────────────────────
@@ -259,7 +308,12 @@ async function runBedrockAgent(
     agentRunId,
   });
 
-  const userMessage = `Perform a complete risk intelligence assessment for shipment ID: ${trigger.shipmentId}.
+  // Load catalog context for this shipment (route, sanctions, DG, HS, Incoterms)
+  const catalogContext = await buildCatalogContextHeader(trigger.shipmentId, tools);
+
+  const userMessage = `${catalogContext}COMPLIANCE ASSESSMENT REQUEST:
+
+Perform a complete risk intelligence assessment for shipment ID: ${trigger.shipmentId}.
 
 Tracking number: ${trigger.trackingNumber}
 Status: ${trigger.newStatus}
@@ -267,7 +321,18 @@ Triggered at: ${trigger.triggeredAt}
 
 Report ID (use this for all findings and the final assessment): ${reportId}
 
-Begin by retrieving the shipment profile and uploaded documents. Then get the route risk context. Read the text of each uploaded document. Synthesize your findings and produce a complete risk intelligence report.`;
+IMPORTANT: The CATALOG-GROUNDED CONTEXT above is pre-loaded knowledge base data for this corridor.
+Use it as your authoritative starting point. Do NOT ignore it.
+
+Begin by retrieving the shipment profile and uploaded documents. Use the catalog context
+for route/sanctions/DG intelligence (you do not need to call get_route_risk_context for
+basic corridor information — it is already provided above). Read the text of each uploaded
+document. Synthesize your findings and produce a complete risk intelligence report.
+
+In your executive_summary, include a 'Knowledge Sources Used' section listing:
+- Which catalog entries informed this assessment
+- The knowledge confidence level
+This makes your findings verifiable and auditable.`;
 
   const messages: Message[] = [{ role: 'user', content: [{ text: userMessage }] }];
 

@@ -6,10 +6,15 @@ import triggerRoutes from './routes/trigger';
 import copilotRoutes from './routes/copilot';
 import briefingRoutes from './routes/briefing';
 import { complianceHandler } from './handlers/complianceHandler';
+import KnowledgeBase from './knowledge/knowledge-base';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Initialize logistics intelligence knowledge base at startup
+// Loads all 5 catalogs synchronously — fast (files are small JSON, <500KB total)
+KnowledgeBase.initialize();
 
 // Health check — used by Docker healthcheck and future EKS liveness probe
 app.use('/api/health', healthRoutes);
@@ -35,6 +40,7 @@ const server = app.listen(config.port, '0.0.0.0', () => {
   console.log(`[ai-service] LLM provider: ${config.llmProvider} / model: ${config.bedrockModelId}`);
   console.log(`[ai-service] SQS queue: ${config.sqsQueueUrl || '(not configured)'}`);
   console.log(`[ai-service] Copilot capabilities: summary, explain-risk, recommendations, ask, similar, timeline`);
+  console.log(`[ai-service] Knowledge Base: route-intelligence, dangerous-goods, hs-intelligence, incoterms, sanctions-watch`);
 });
 
 // Graceful shutdown

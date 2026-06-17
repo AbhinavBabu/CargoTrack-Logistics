@@ -1,0 +1,461 @@
+{
+  "_catalog": {
+    "name": "CargoTrack Incoterms Intelligence Catalog",
+    "version": "1.0.0",
+    "effectiveDate": "2024-01-01",
+    "sources": [
+      "Incoterms® 2020 — International Chamber of Commerce (ICC)",
+      "ICC Publication No. 723E",
+      "World Customs Organization (WCO) Incoterms guidance"
+    ],
+    "disclaimer": "Incoterms® 2020 rules are published by the International Chamber of Commerce. The rules should be agreed upon in the contract of sale and incorporated by reference to 'Incoterms® 2020'. These descriptions are for educational and risk-screening purposes."
+  },
+  "terms": [
+    {
+      "term": "EXW",
+      "fullName": "Ex Works",
+      "iccCode": "EXW",
+      "validModes": ["Any mode", "Multimodal"],
+      "riskTransferPoint": "At seller's premises (factory, warehouse, etc.)",
+      "sellerResponsibilities": [
+        "Make goods available at named place",
+        "Provide commercial invoice and packing list",
+        "Export packaging"
+      ],
+      "buyerResponsibilities": [
+        "Export customs clearance (note: buyer assumes export in seller's country — unusual)",
+        "All freight costs from seller's door",
+        "Import customs clearance and duties",
+        "All insurance"
+      ],
+      "sellerRiskLevel": "MINIMAL",
+      "buyerRiskLevel": "MAXIMUM",
+      "requiredDocumentsForSeller": [
+        "Commercial Invoice",
+        "Packing List"
+      ],
+      "commonMisuse": "EXW puts export customs obligation on buyer, which is impractical for foreign buyers who cannot control export procedures in the seller's country. Many banks and customs authorities prefer FOB or FCA for letters of credit.",
+      "insuranceNotes": "Buyer bears all insurance risk from seller's premises. Seller has no insurance obligation.",
+      "customsResponsibility": "BUYER handles both export and import customs. Highly unusual arrangement.",
+      "riskProfile": {
+        "forSeller": "LOW — seller bears almost no risk or cost after making goods available",
+        "forBuyer": "HIGH — buyer bears all costs and risks including export complications in seller's country"
+      },
+      "complianceFlags": [
+        "Export control: if buyer is foreign, seller may still have export control obligations even under EXW",
+        "AES/EEI filing: U.S. exporter must still file Electronic Export Information regardless of Incoterms"
+      ],
+      "lcCompatible": false,
+      "lcNotes": "Not recommended for letters of credit — buyer controls all transport; bank cannot easily verify shipment"
+    },
+    {
+      "term": "FCA",
+      "fullName": "Free Carrier",
+      "iccCode": "FCA",
+      "validModes": ["Any mode", "Multimodal", "Air", "Sea", "Road", "Rail"],
+      "riskTransferPoint": "When goods are delivered to named carrier at named place. If seller's premises: when loaded on buyer's transport. If other place: when delivered ready for unloading.",
+      "sellerResponsibilities": [
+        "Export customs clearance",
+        "Deliver goods to carrier at named place",
+        "Provide commercial invoice, packing list"
+      ],
+      "buyerResponsibilities": [
+        "Contract with carrier from named place",
+        "All freight costs from named place",
+        "Import customs clearance",
+        "Insurance (optional but recommended)"
+      ],
+      "sellerRiskLevel": "LOW",
+      "buyerRiskLevel": "HIGH",
+      "requiredDocumentsForSeller": [
+        "Commercial Invoice",
+        "Packing List",
+        "Export Customs Declaration",
+        "Certificate of Origin (if required)"
+      ],
+      "commonMisuse": "Sometimes confused with FOB. Key difference: FCA works for all transport modes including container. FOB is technically for bulk/break-bulk sea only.",
+      "insuranceNotes": "No insurance obligation on either party by default. Buyer should arrange insurance from named place. Incoterms 2020 added option for seller to obtain bill of lading at buyer's request.",
+      "customsResponsibility": "SELLER handles export customs. BUYER handles import customs.",
+      "riskProfile": {
+        "forSeller": "LOW — risk transfers at named place close to seller",
+        "forBuyer": "HIGH — bears main transit risk"
+      },
+      "complianceFlags": [
+        "Seller must complete export customs formalities — cannot disclaim export control obligations",
+        "Recommended for containerized cargo (unlike FOB which is technically break-bulk)"
+      ],
+      "lcCompatible": true,
+      "lcNotes": "Compatible with LCs. Incoterms 2020 option: seller can instruct carrier to issue on-board B/L for LC purposes"
+    },
+    {
+      "term": "FAS",
+      "fullName": "Free Alongside Ship",
+      "iccCode": "FAS",
+      "validModes": ["Sea", "Inland Waterway ONLY"],
+      "riskTransferPoint": "When goods are placed alongside the vessel at the named port of shipment.",
+      "sellerResponsibilities": [
+        "Export customs clearance",
+        "Deliver goods alongside vessel at named port"
+      ],
+      "buyerResponsibilities": [
+        "Loading costs",
+        "Ocean freight",
+        "Import customs clearance",
+        "Insurance"
+      ],
+      "sellerRiskLevel": "LOW",
+      "buyerRiskLevel": "HIGH",
+      "requiredDocumentsForSeller": [
+        "Commercial Invoice",
+        "Packing List",
+        "Export Customs Declaration"
+      ],
+      "commonMisuse": "Only appropriate for bulk cargo, break-bulk, or bulk commodities where goods are loaded directly into holds. Not suitable for containerized cargo (use FCA instead).",
+      "insuranceNotes": "Seller not obligated to insure. Risk transfers alongside vessel — before loading.",
+      "customsResponsibility": "SELLER handles export. BUYER handles import.",
+      "riskProfile": {
+        "forSeller": "LOW",
+        "forBuyer": "HIGH — bears loading and all subsequent risks"
+      },
+      "complianceFlags": [
+        "Sea/inland waterway only — do not use for air or multimodal",
+        "Appropriate for bulk (grain, coal) or break-bulk, not containers"
+      ],
+      "lcCompatible": false,
+      "lcNotes": "Difficult with LCs — risk transfers before loading, so B/L won't confirm risk transfer point"
+    },
+    {
+      "term": "FOB",
+      "fullName": "Free on Board",
+      "iccCode": "FOB",
+      "validModes": ["Sea", "Inland Waterway ONLY"],
+      "riskTransferPoint": "When goods are placed on board the vessel at the named port of shipment.",
+      "sellerResponsibilities": [
+        "Export customs clearance",
+        "Deliver goods on board vessel",
+        "Loading costs"
+      ],
+      "buyerResponsibilities": [
+        "Ocean freight from port of shipment",
+        "Import customs clearance",
+        "Insurance (after on-board)"
+      ],
+      "sellerRiskLevel": "LOW-MEDIUM",
+      "buyerRiskLevel": "HIGH",
+      "requiredDocumentsForSeller": [
+        "Commercial Invoice",
+        "Packing List",
+        "Export Customs Declaration",
+        "On-Board Bill of Lading (confirming goods on board)"
+      ],
+      "commonMisuse": "Most commonly misused Incoterm. FOB is technically for bulk/break-bulk sea freight only. Using FOB for container shipments (most modern sea freight) is technically incorrect — risk should transfer at container yard (use FCA instead). However, market practice often still uses FOB for containers, especially in Asia trade.",
+      "insuranceNotes": "Seller not obligated to insure. Risk transfers on board vessel — buyer should have insurance from that point.",
+      "customsResponsibility": "SELLER handles export. BUYER handles import.",
+      "riskProfile": {
+        "forSeller": "LOW-MEDIUM",
+        "forBuyer": "HIGH"
+      },
+      "complianceFlags": [
+        "Technically sea/waterway only — containers should use FCA",
+        "Risk transfer at ship's rail — seller bears loading risk",
+        "Must specify port of shipment precisely",
+        "Widely used in practice for containerized Asia-trade despite technical incorrectness"
+      ],
+      "lcCompatible": true,
+      "lcNotes": "Very compatible with LCs — on-board B/L clearly evidences delivery"
+    },
+    {
+      "term": "CFR",
+      "fullName": "Cost and Freight",
+      "iccCode": "CFR",
+      "validModes": ["Sea", "Inland Waterway ONLY"],
+      "riskTransferPoint": "Risk transfers when goods are on board vessel at port of shipment. Seller pays freight to destination port but does NOT bear risk during transit.",
+      "sellerResponsibilities": [
+        "Export customs clearance",
+        "Load goods on board vessel",
+        "Pay ocean freight to named destination port",
+        "Provide on-board bill of lading"
+      ],
+      "buyerResponsibilities": [
+        "All risk from port of shipment (even though seller pays freight)",
+        "Import customs clearance and duties",
+        "Unloading at destination port",
+        "Insurance (critical — buyer bears risk during seller-paid transit)"
+      ],
+      "sellerRiskLevel": "LOW",
+      "buyerRiskLevel": "HIGH",
+      "requiredDocumentsForSeller": [
+        "Commercial Invoice",
+        "Packing List",
+        "On-Board Bill of Lading",
+        "Export Customs Declaration"
+      ],
+      "commonMisuse": "Buyer often misunderstands: seller pays freight but risk is on BUYER during transit. Buyer must arrange insurance. Many buyers assume CFR = seller's risk during transit — INCORRECT.",
+      "insuranceNotes": "BUYER must arrange insurance. Seller has no insurance obligation. This mismatch (seller pays freight, buyer bears risk) makes insurance critical for buyer.",
+      "customsResponsibility": "SELLER handles export. BUYER handles import.",
+      "riskProfile": {
+        "forSeller": "LOW — risk transfers at loading, only cost commitment is freight",
+        "forBuyer": "HIGH — bears transit risk despite not paying freight"
+      },
+      "complianceFlags": [
+        "Sea/waterway only — use CPT for multimodal",
+        "CRITICAL: buyer bears risk even though seller pays freight — insurance mandatory for buyer",
+        "Must specify destination port precisely"
+      ],
+      "lcCompatible": true,
+      "lcNotes": "Compatible with LCs — on-board B/L evidences shipment"
+    },
+    {
+      "term": "CIF",
+      "fullName": "Cost, Insurance and Freight",
+      "iccCode": "CIF",
+      "validModes": ["Sea", "Inland Waterway ONLY"],
+      "riskTransferPoint": "Risk transfers on board vessel at port of shipment. Seller pays freight AND minimum insurance to destination port.",
+      "sellerResponsibilities": [
+        "Export customs clearance",
+        "Load goods on board vessel",
+        "Pay ocean freight",
+        "Arrange and pay minimum cargo insurance (Institute Cargo Clauses C — minimum coverage)",
+        "Provide insurance certificate naming buyer as beneficiary",
+        "Provide on-board bill of lading"
+      ],
+      "buyerResponsibilities": [
+        "All risk from port of shipment",
+        "Import customs clearance and duties",
+        "Unloading at destination",
+        "Consider topping up insurance (Clauses C is minimum — buyer may want Clauses A)"
+      ],
+      "sellerRiskLevel": "LOW-MEDIUM",
+      "buyerRiskLevel": "MEDIUM",
+      "requiredDocumentsForSeller": [
+        "Commercial Invoice",
+        "Packing List",
+        "On-Board Bill of Lading",
+        "Insurance Certificate / Policy (naming buyer, covering at least CIF value + 10%)",
+        "Export Customs Declaration"
+      ],
+      "commonMisuse": "CIF is sea/waterway ONLY. Using CIF for air freight is technically incorrect (use CIP). Also: seller's insurance obligation is MINIMUM (Clauses C) — buyer should verify adequacy. Insurance certificate must name buyer as beneficiary.",
+      "insuranceNotes": "Seller must provide MINIMUM insurance (Institute Cargo Clauses C). Coverage must be at least 110% of CIF value. Insurance policy must be assignable and in buyer's currency. BUYER should consider upgrading to Clauses A (all-risk) at their own cost.",
+      "customsResponsibility": "SELLER handles export. BUYER handles import.",
+      "riskProfile": {
+        "forSeller": "LOW-MEDIUM — some insurance cost obligation",
+        "forBuyer": "MEDIUM — has minimum insurance, but Clauses C coverage is limited"
+      },
+      "complianceFlags": [
+        "Sea/waterway ONLY — use CIP for other modes",
+        "Insurance certificate must name buyer as beneficiary — verify",
+        "Clauses C is minimum coverage — check adequacy for high-value or fragile goods",
+        "Insurance amount must be at least 110% of CIF invoice value",
+        "Most common Incoterm in LC transactions"
+      ],
+      "lcCompatible": true,
+      "lcNotes": "Highly compatible with LCs. Documents required: Commercial Invoice, B/L, Insurance Certificate — classic documentary credit document set"
+    },
+    {
+      "term": "CPT",
+      "fullName": "Carriage Paid To",
+      "iccCode": "CPT",
+      "validModes": ["Any mode", "Multimodal", "Air", "Rail", "Road", "Sea"],
+      "riskTransferPoint": "Risk transfers when seller delivers goods to FIRST carrier at place of shipment. Seller pays freight to named destination. Risk/cost split point differs.",
+      "sellerResponsibilities": [
+        "Export customs clearance",
+        "Deliver goods to carrier",
+        "Pay all freight to named destination"
+      ],
+      "buyerResponsibilities": [
+        "All risk from first carrier delivery point",
+        "Import customs clearance",
+        "Insurance (seller has no obligation)"
+      ],
+      "sellerRiskLevel": "LOW",
+      "buyerRiskLevel": "HIGH",
+      "requiredDocumentsForSeller": [
+        "Commercial Invoice",
+        "Packing List",
+        "Transport Document (not necessarily B/L — any mode)",
+        "Export Customs Declaration"
+      ],
+      "commonMisuse": "Often confused with CIP (which adds insurance). Risk transfers at first carrier even though seller pays to destination. Buyer must arrange insurance.",
+      "insuranceNotes": "No insurance obligation on seller. Buyer must arrange insurance coverage from point of first carrier delivery.",
+      "customsResponsibility": "SELLER handles export. BUYER handles import.",
+      "riskProfile": {
+        "forSeller": "LOW — risk transfers early",
+        "forBuyer": "HIGH — bears transit risk"
+      },
+      "complianceFlags": [
+        "All modes — multimodal friendly (unlike CFR which is sea only)",
+        "Risk transfers at first carrier, not destination — buyer must insure",
+        "Seller must specify named place of destination clearly"
+      ],
+      "lcCompatible": true,
+      "lcNotes": "Compatible with LCs but transport document type varies by mode"
+    },
+    {
+      "term": "CIP",
+      "fullName": "Carriage and Insurance Paid To",
+      "iccCode": "CIP",
+      "validModes": ["Any mode", "Multimodal", "Air", "Rail", "Road", "Sea"],
+      "riskTransferPoint": "Risk transfers at first carrier delivery. Seller pays freight AND insurance (ALL RISKS — Institute Cargo Clauses A) to named destination.",
+      "sellerResponsibilities": [
+        "Export customs clearance",
+        "Deliver goods to carrier",
+        "Pay all freight to named destination",
+        "Arrange and pay comprehensive ALL-RISK insurance (Clauses A — higher than CIF requirement)"
+      ],
+      "buyerResponsibilities": [
+        "All risk from first carrier delivery point",
+        "Import customs clearance",
+        "Unloading at destination"
+      ],
+      "sellerRiskLevel": "MEDIUM",
+      "buyerRiskLevel": "MEDIUM",
+      "requiredDocumentsForSeller": [
+        "Commercial Invoice",
+        "Packing List",
+        "Transport Document",
+        "Insurance Certificate / Policy (ALL RISKS — Clauses A, minimum 110% of CIP value)",
+        "Export Customs Declaration"
+      ],
+      "commonMisuse": "CIP requires ALL RISKS (Clauses A) insurance — higher standard than CIF (which only requires Clauses C). Sellers sometimes incorrectly provide minimum Clauses C under CIP.",
+      "insuranceNotes": "Seller MUST provide Clauses A (all-risk) insurance under Incoterms 2020. This is an upgrade from CIF. Coverage must be at least 110% of CIP value. Policy must be assignable to buyer.",
+      "customsResponsibility": "SELLER handles export. BUYER handles import.",
+      "riskProfile": {
+        "forSeller": "MEDIUM — freight and all-risk insurance cost",
+        "forBuyer": "MEDIUM — has all-risk insurance coverage but still bears some risk gaps"
+      },
+      "complianceFlags": [
+        "ALL RISKS insurance (Clauses A) mandatory — verify seller has not cut costs with Clauses C",
+        "All modes — preferred over CIF for multimodal/air",
+        "Risk transfers at first carrier — not destination"
+      ],
+      "lcCompatible": true,
+      "lcNotes": "Compatible with LCs for all modes. Insurance certificate is key document"
+    },
+    {
+      "term": "DAP",
+      "fullName": "Delivered at Place",
+      "iccCode": "DAP",
+      "validModes": ["Any mode", "Multimodal"],
+      "riskTransferPoint": "When goods are placed at buyer's disposal at named destination, ready for unloading, but before customs clearance.",
+      "sellerResponsibilities": [
+        "Export customs clearance",
+        "All freight and insurance (optional) to named destination",
+        "Bear all transit risk",
+        "Deliver to named place ready for unloading"
+      ],
+      "buyerResponsibilities": [
+        "Unloading at destination",
+        "Import customs clearance",
+        "Import duties and taxes"
+      ],
+      "sellerRiskLevel": "HIGH",
+      "buyerRiskLevel": "LOW",
+      "requiredDocumentsForSeller": [
+        "Commercial Invoice",
+        "Packing List",
+        "Transport Document",
+        "Export Customs Declaration",
+        "Insurance documents (if arranged)"
+      ],
+      "commonMisuse": "Seller bears all transit risk but has no insurance obligation — must arrange voluntarily. Often confused with DDP (which includes import clearance). Under DAP, buyer still handles import customs.",
+      "insuranceNotes": "No insurance obligation on seller — but seller bears all transit risk. Seller should arrange insurance to protect their exposure.",
+      "customsResponsibility": "SELLER handles export. BUYER handles import.",
+      "riskProfile": {
+        "forSeller": "HIGH — bears all transit risk and costs",
+        "forBuyer": "LOW — only handles import customs and unloading"
+      },
+      "complianceFlags": [
+        "Seller bears full transit risk — should arrange insurance",
+        "Buyer handles import customs (unlike DDP)",
+        "Named destination must be specific — including unloading location if relevant",
+        "Popular for e-commerce and direct-to-consumer international shipments"
+      ],
+      "lcCompatible": false,
+      "lcNotes": "Not ideal for LCs — seller's obligations only evidenced upon delivery at destination, which banks cannot easily verify at time of presentation"
+    },
+    {
+      "term": "DPU",
+      "fullName": "Delivered at Place Unloaded",
+      "iccCode": "DPU",
+      "validModes": ["Any mode", "Multimodal"],
+      "riskTransferPoint": "When goods are unloaded at the named destination. Seller bears risk through unloading.",
+      "sellerResponsibilities": [
+        "Export customs clearance",
+        "All freight to destination",
+        "Bear all transit risk including during unloading",
+        "UNLOAD goods at named destination (this is the key difference from DAP)"
+      ],
+      "buyerResponsibilities": [
+        "Import customs clearance",
+        "Import duties and taxes"
+      ],
+      "sellerRiskLevel": "VERY HIGH",
+      "buyerRiskLevel": "VERY LOW",
+      "requiredDocumentsForSeller": [
+        "Commercial Invoice",
+        "Packing List",
+        "Transport Document",
+        "Export Customs Declaration",
+        "Delivery/Unloading Receipt"
+      ],
+      "commonMisuse": "DPU is the ONLY Incoterm where the seller is responsible for unloading at destination. This requires the seller to have the right to unload at the destination facility — not always practical. New in Incoterms 2020 (previously 'DAT — Delivered at Terminal').",
+      "insuranceNotes": "No insurance obligation but seller bears maximum risk through unloading. Seller must arrange insurance.",
+      "customsResponsibility": "SELLER handles export. BUYER handles import.",
+      "riskProfile": {
+        "forSeller": "VERY HIGH — maximum exposure including unloading",
+        "forBuyer": "VERY LOW"
+      },
+      "complianceFlags": [
+        "ONLY Incoterm where seller unloads at destination — verify right to unload",
+        "Seller bears maximum risk — insurance essential",
+        "Replaced DAT in Incoterms 2020"
+      ],
+      "lcCompatible": false,
+      "lcNotes": "Very difficult for LCs — risk/delivery evidenced only at unloading"
+    },
+    {
+      "term": "DDP",
+      "fullName": "Delivered Duty Paid",
+      "iccCode": "DDP",
+      "validModes": ["Any mode", "Multimodal"],
+      "riskTransferPoint": "When goods are placed at buyer's disposal at named destination, cleared for import.",
+      "sellerResponsibilities": [
+        "Export customs clearance",
+        "All freight and insurance (optional)",
+        "Import customs clearance IN DESTINATION COUNTRY",
+        "All import duties and taxes",
+        "Bear all risk until delivery at destination"
+      ],
+      "buyerResponsibilities": [
+        "Unloading at destination",
+        "Nothing else — maximum convenience for buyer"
+      ],
+      "sellerRiskLevel": "MAXIMUM",
+      "buyerRiskLevel": "MINIMUM",
+      "requiredDocumentsForSeller": [
+        "Commercial Invoice",
+        "Packing List",
+        "Export Customs Declaration",
+        "Import Customs Declaration (destination country — seller must be authorized importer)",
+        "Proof of duty payment",
+        "Transport Document"
+      ],
+      "commonMisuse": "DDP requires seller to act as importer of record in the destination country — which may be legally impossible without a local entity or importer registration. Seller may not be able to obtain import licenses. DDP also transfers VAT/GST obligation to seller in many countries.",
+      "insuranceNotes": "Seller bears all risk — must arrange insurance. No obligation stated but essential to protect maximum exposure.",
+      "customsResponsibility": "SELLER handles BOTH export AND import customs. Maximum obligation for seller.",
+      "riskProfile": {
+        "forSeller": "MAXIMUM — all risks, all costs, all customs",
+        "forBuyer": "MINIMUM — just receive and unload"
+      },
+      "complianceFlags": [
+        "CRITICAL: Seller must be registered importer in destination country — often not practical",
+        "Import VAT/GST obligation falls on seller — tax compliance complexity",
+        "Cannot use if seller cannot act as importer of record (no legal entity in destination)",
+        "Very popular for e-commerce (Delivered Duty Paid = 'no surprise charges for buyer')",
+        "If seller cannot handle import formalities, use DAP instead"
+      ],
+      "lcCompatible": false,
+      "lcNotes": "Not suitable for LCs — delivery only evidenced after full customs clearance at destination"
+    }
+  ]
+}
