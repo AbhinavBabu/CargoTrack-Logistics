@@ -139,8 +139,13 @@ services:
       PORT: 4002
       NODE_ENV: ${NODE_ENV:-development}
       AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-}
+      # ── LLM Provider (Bedrock / Gemini / Mock) ───────────────────────────────
+      # LLM_PROVIDER=bedrock → real Nova calls (requires AWS creds + model access)
+      # LLM_PROVIDER=mock    → deterministic mock (default when no AWS region set)
+      LLM_PROVIDER: ${LLM_PROVIDER:-}
       SQS_COMPLIANCE_QUEUE_URL: ${SQS_COMPLIANCE_QUEUE_URL:-}
-      BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-amazon.nova-pro-v1:0}
+      # Nova Lite is the default (cost-efficient, fast, ACTIVE in us-east-1)
+      BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-amazon.nova-lite-v1:0}
       S3_BUCKET: ${S3_BUCKET:-}
       DYNAMO_AUDIT_TABLE: ${DYNAMO_AUDIT_TABLE:-cargotrack-audit}
       INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:-}
@@ -151,6 +156,11 @@ services:
       TEXTRACT_ENABLED: ${TEXTRACT_ENABLED:-false}
       # Local upload dir — shared volume with document-service
       UPLOAD_DIR: /uploads
+      # AWS credentials — inject via environment when testing against real Bedrock
+      # (do NOT hard-code keys here; use env vars or mount ~/.aws as volume)
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
     ports:
       - "${AI_PORT:-4002}:4002"
     volumes:
