@@ -157,6 +157,14 @@ export class AgentTools implements AgentDataAccess {
       weight: shipment.weight,
       status: shipment.status,
       description: shipment.description ?? null,
+      // ── vNext: Extended intelligence fields ─────────────────────────────────
+      commodityType: shipment.commodityType ?? null,
+      hsCodeHint: shipment.hsCodeHint ?? null,
+      isDangerousGoods: shipment.isDangerousGoods,
+      dangerousGoodsClass: shipment.dangerousGoodsClass ?? null,
+      incoterms: shipment.incoterms ?? null,
+      declaredValue: shipment.declaredValue ?? null,
+      currencyCode: shipment.currencyCode ?? null,
     };
   }
 
@@ -306,6 +314,29 @@ export class AgentTools implements AgentDataAccess {
       `status=${input.status}, riskLevel=${input.riskLevel ?? 'N/A'}, ` +
       `riskScore=${input.overallRiskScore?.toFixed(2) ?? 'N/A'}`
     );
+
+    // ── Write-back: replicate risk score/level to Shipment for fast list queries ──
+    // This avoids a JOIN to ComplianceReport every time we list shipments.
+    if (input.overallRiskScore !== undefined || input.riskLevel !== undefined) {
+      try {
+        const report = await this.prisma.complianceReport.findUnique({
+          where: { id: input.reportId },
+          select: { shipmentId: true },
+        });
+        if (report) {
+          await this.prisma.shipment.update({
+            where: { id: report.shipmentId },
+            data: {
+              aiRiskScore: input.overallRiskScore ?? null,
+              aiRiskLevel: input.riskLevel ?? null,
+            },
+          });
+          console.log(`[AgentTools] Risk written back to Shipment ${report.shipmentId}: ${input.riskLevel}`);
+        }
+      } catch (err) {
+        console.warn('[AgentTools] Failed to write risk back to Shipment:', err);
+      }
+    }
   }
 
   // ─── Internal: read findings for report (used by mock runner) ────────────
@@ -528,12 +559,69 @@ export class AgentTools implements AgentDataAccess {
       data: { executiveSummary: copilotSummary },
     });
   }
+  // ─── Briefing: save or update AI route briefing for a shipment ────────────────────
+
+  async saveBriefing(shipmentId: string, briefing: {
+    corridor: string;
+    riskSummary: string;
+    requiredDocuments: string[];
+    customsComplexity: string;
+    sanctionsStatus: string;
+    estimatedClearanceHours: number;
+    delayProbability: number;
+    keyRisks: string[];
+    regulatoryNotes: string;
+    modelId: string;
+  }): Promise<void> {
+    await this.prisma.shipmentAIBriefing.upsert({
+      where: { shipmentId },
+      create: {
+        shipmentId,
+        ...briefing,
+        requiredDocuments: briefing.requiredDocuments as any,
+        keyRisks: briefing.keyRisks as any,
+      },
+      update: {
+        ...briefing,
+        requiredDocuments: briefing.requiredDocuments as any,
+        keyRisks: briefing.keyRisks as any,
+        updatedAt: new Date(),
+      },
+    });
+    console.log(`[AgentTools] Briefing saved for shipment ${shipmentId}`);
+  }
+
+  async getBriefing(shipmentId: string): Promise<{
+    corridor: string;
+    riskSummary: string;
+    requiredDocuments: string[];
+    customsComplexity: string | null;
+    sanctionsStatus: string | null;
+    estimatedClearanceHours: number | null;
+    delayProbability: number | null;
+    keyRisks: string[];
+    regulatoryNotes: string | null;
+    modelId: string | null;
+    generatedAt: Date;
+  } | null> {
+    const b = await this.prisma.shipmentAIBriefing.findUnique({ where: { shipmentId } });
+    if (!b) return null;
+    return {
+      corridor: b.corridor,
+      riskSummary: b.riskSummary,
+      requiredDocuments: (b.requiredDocuments as string[]) ?? [],
+      customsComplexity: b.customsComplexity,
+      sanctionsStatus: b.sanctionsStatus,
+      estimatedClearanceHours: b.estimatedClearanceHours,
+      delayProbability: b.delayProbability,
+      keyRisks: (b.keyRisks as string[]) ?? [],
+      regulatoryNotes: b.regulatoryNotes,
+      modelId: b.modelId,
+      generatedAt: b.generatedAt,
+    };
+  }
 }
 
-// ─── Singleton ────────────────────────────────────────────────────────────────
-//
-// Single shared PrismaClient instance for the ai-service process.
-// Both the compliance runner and the copilot engine use this instance.
-
+// ─── Singleton ────────────────────────────────────────────────────────────────────────────────
 const _prisma = new PrismaClient();
 export const agentTools = new AgentTools(_prisma);

@@ -25,8 +25,6 @@ enum ShipmentStatus {
   CANCELLED
 }
 
-// Document types known to the compliance agent.
-// "OTHER" is the escape hatch for legacy / unknown types.
 enum DocumentType {
   INVOICE
   BILL_OF_LADING
@@ -45,10 +43,10 @@ enum ComplianceSeverity {
 }
 
 enum ComplianceStatus {
-  PENDING   // Agent triggered but not yet complete
-  PASSED    // All checks passed
-  FAILED    // One or more CRITICAL/HIGH findings
-  PARTIAL   // Checks ran but some documents were missing
+  PENDING
+  PASSED
+  FAILED
+  PARTIAL
 }
 
 enum FindingType {
@@ -56,9 +54,14 @@ enum FindingType {
   DATA_MISMATCH
   COMPLIANCE_RISK
   VALIDATION_ERROR
+  DANGEROUS_GOODS_RISK
+  PARTY_SCREENING_FLAG
+  HS_CODE_MISMATCH
+  VALUE_DISCREPANCY
+  ROUTE_RESTRICTION
 }
 
-// ─── Core Domain ──────────────────────────────────────────────────────────────
+// ─── Core Domain (read by ai-service agent tools) ─────────────────────────────
 
 model User {
   id             String         @id @default(uuid())
@@ -83,20 +86,29 @@ model Shipment {
   destination           String
   shipmentType          String
   weight                Float
-  // carrierName added for Phase 1: required by the compliance agent to cross-
-  // reference against Bill of Lading carrier field.
   carrierName           String?
   description           String?
   estimatedDeliveryDate DateTime?
   status                ShipmentStatus     @default(CREATED)
+  // ── vNext: Extended intelligence fields ───────────────────────────────────
+  commodityType         String?
+  hsCodeHint            String?
+  isDangerousGoods      Boolean            @default(false)
+  dangerousGoodsClass   String?
+  incoterms             String?
+  declaredValue         Float?
+  currencyCode          String?            @default("USD")
+  aiRiskScore           Float?
+  aiRiskLevel           String?
+  // ─────────────────────────────────────────────────────────────────────────
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
   userId                String
   user                  User               @relation(fields: [userId], references: [id])
   trackingEvents        TrackingEvent[]
   documents             ShipmentDocument[]
-  // Compliance relation — one report per shipment (unique enforced)
   complianceReport      ComplianceReport?
+  aiBriefing            ShipmentAIBriefing?
 }
 
 model TrackingEvent {
@@ -115,12 +127,10 @@ model ShipmentDocument {
   originalName String
   fileType     String
   fileSize     Int
-  // Changed from String to DocumentType enum for type safety + AI routing
   documentType DocumentType @default(OTHER)
   uploadedAt   DateTime     @default(now())
   shipmentId   String
   shipment     Shipment     @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
-  // A finding can reference the specific document that caused it
   findings     ComplianceFinding[]
 }
 
@@ -134,28 +144,41 @@ model Notification {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-// ─── AI Compliance Models ─────────────────────────────────────────────────────
-// These models store the output of the Document Compliance Agent.
-// The agent (ai-service) writes directly to these tables via the shared
-// PostgreSQL connection. This avoids a synchronous API call from ai-service
-// back to core-service during the agent run.
+// ─── AI Intelligence Models ───────────────────────────────────────────────────
+
+// ShipmentAIBriefing — Written by ai-service, read by core-service proxy.
+// Generated on shipment create — provides instant route intelligence.
+model ShipmentAIBriefing {
+  id                       String   @id @default(uuid())
+  shipmentId               String   @unique
+  shipment                 Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  corridor                 String
+  riskSummary              String   @db.Text
+  requiredDocuments        Json     @default("[]")
+  customsComplexity        String?
+  sanctionsStatus          String?
+  estimatedClearanceHours  Int?
+  delayProbability         Float?
+  keyRisks                 Json     @default("[]")
+  regulatoryNotes          String?  @db.Text
+  modelId                  String?
+  generatedAt              DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+}
 
 model ComplianceReport {
   id                     String             @id @default(uuid())
-  shipmentId             String             @unique  // one report per shipment
+  shipmentId             String             @unique
   shipment               Shipment           @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
   status                 ComplianceStatus   @default(PENDING)
-  // Legacy one-line summary (kept for backward compat)
   summary                String?
-  // ── Risk Intelligence fields (v3.1) ──────────────────────────────────────
   overallRiskScore       Float?
-  riskLevel              String?            // LOW | MEDIUM | HIGH | CRITICAL
-  executiveSummary       String?
-  recommendedDisposition String?
+  riskLevel              String?
+  executiveSummary       String?            @db.Text
+  recommendedDisposition String?            @db.Text
   modelId                String?
   modelConfidence        Float?
   processingTimeMs       Int?
-  // ─────────────────────────────────────────────────────────────────────────
   agentRunId             String?
   findings               ComplianceFinding[]
   createdAt              DateTime           @default(now())
@@ -172,12 +195,10 @@ model ComplianceFinding {
   severity          ComplianceSeverity
   description       String
   detail            Json?
-  // ── Risk Intelligence fields (v3.1) ──────────────────────────────────────
-  evidence          String?
-  reasoning         String?
+  evidence          String?            @db.Text
+  reasoning         String?            @db.Text
   confidenceScore   Float?
-  recommendedAction String?
-  // ─────────────────────────────────────────────────────────────────────────
+  recommendedAction String?            @db.Text
   resolvedAt        DateTime?
   createdAt         DateTime           @default(now())
 }

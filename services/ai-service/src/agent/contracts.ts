@@ -29,6 +29,14 @@ export interface ShipmentRecord {
   weight: number;
   status: string;
   description: string | null;
+  // ── vNext: Extended intelligence fields ───────────────────────────────────
+  commodityType: string | null;       // e.g. "Electronics", "Pharmaceuticals"
+  hsCodeHint: string | null;          // user-provided HS code hint
+  isDangerousGoods: boolean;          // DG flag
+  dangerousGoodsClass: string | null; // IATA/IMDG class if DG
+  incoterms: string | null;           // EXW, FOB, CIF, DDP, etc.
+  declaredValue: number | null;       // declared customs value
+  currencyCode: string | null;        // currency for declared value
 }
 
 export interface DocumentRecord {
@@ -275,7 +283,17 @@ export const COMPLIANCE_AGENT_TOOLS: BedrockToolSpec[] = [
           },
           finding_type: {
             type: 'string',
-            enum: ['MISSING_DOCUMENT', 'DATA_MISMATCH', 'COMPLIANCE_RISK', 'VALIDATION_ERROR'],
+            enum: [
+              'MISSING_DOCUMENT',
+              'DATA_MISMATCH',
+              'COMPLIANCE_RISK',
+              'VALIDATION_ERROR',
+              'DANGEROUS_GOODS_RISK',
+              'PARTY_SCREENING_FLAG',
+              'HS_CODE_MISMATCH',
+              'VALUE_DISCREPANCY',
+              'ROUTE_RESTRICTION',
+            ],
           },
           severity: { type: 'string', enum: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] },
           description: {

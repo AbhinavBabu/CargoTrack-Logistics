@@ -1,10 +1,35 @@
 import { Link } from 'react-router-dom';
-import { Shipment } from '../types';
+import type { Shipment } from '../types';
 import { StatusBadge } from './TrackingTimeline';
 import { Eye, MapPin, Package } from 'lucide-react';
 
 interface Props {
   shipments: Shipment[];
+}
+
+// ─── Risk badge helper ────────────────────────────────────────────────────────
+
+function RiskBadge({ level }: { level?: string | null }) {
+  if (!level) {
+    return <span style={{ color: '#475569', fontSize: '10px', fontStyle: 'italic' }}>AI pending</span>;
+  }
+  const config: Record<string, { color: string; bg: string; border: string; dot: string }> = {
+    CRITICAL: { color: '#fca5a5', bg: 'rgba(239,68,68,0.1)',  border: 'rgba(239,68,68,0.3)',  dot: '🔴' },
+    HIGH:     { color: '#fdba74', bg: 'rgba(249,115,22,0.1)', border: 'rgba(249,115,22,0.3)', dot: '🟠' },
+    MEDIUM:   { color: '#fcd34d', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.3)', dot: '🟡' },
+    LOW:      { color: '#86efac', bg: 'rgba(34,197,94,0.1)',  border: 'rgba(34,197,94,0.3)',  dot: '🟢' },
+  };
+  const c = config[level] || config.LOW;
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: '4px',
+      padding: '2px 8px', borderRadius: '10px',
+      background: c.bg, border: `1px solid ${c.border}`,
+      color: c.color, fontSize: '10px', fontWeight: 700,
+    }}>
+      {c.dot} {level}
+    </span>
+  );
 }
 
 export default function ShipmentTable({ shipments }: Props) {
@@ -28,6 +53,7 @@ export default function ShipmentTable({ shipments }: Props) {
               <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">Tracking #</th>
               <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">Shipment</th>
               <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">Route</th>
+              <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">AI Risk</th>
               <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">Status</th>
               <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">Date</th>
               <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3"></th>
@@ -43,7 +69,10 @@ export default function ShipmentTable({ shipments }: Props) {
                 </td>
                 <td className="px-5 py-3.5">
                   <p className="text-sm font-medium text-slate-200">{shipment.title}</p>
-                  <p className="text-xs text-slate-600 mt-0.5">{shipment.shipmentType} · {shipment.weight} kg</p>
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    {shipment.shipmentType} · {shipment.weight} kg
+                    {shipment.commodityType && ` · ${shipment.commodityType}`}
+                  </p>
                 </td>
                 <td className="px-5 py-3.5">
                   <div className="flex items-center gap-1.5 text-xs text-slate-400">
@@ -52,6 +81,21 @@ export default function ShipmentTable({ shipments }: Props) {
                     <span className="text-slate-700">→</span>
                     <span className="truncate max-w-[90px]">{shipment.destination}</span>
                   </div>
+                  {/* Show corridor from aiBriefing if available */}
+                  {shipment.aiBriefing?.customsComplexity && (
+                    <span style={{
+                      display: 'inline-block', marginTop: '4px',
+                      padding: '1px 6px', borderRadius: '8px', fontSize: '9px', fontWeight: 700,
+                      background: shipment.aiBriefing.customsComplexity === 'HIGH' ? 'rgba(239,68,68,0.08)' : shipment.aiBriefing.customsComplexity === 'MEDIUM' ? 'rgba(245,158,11,0.08)' : 'rgba(34,197,94,0.08)',
+                      color: shipment.aiBriefing.customsComplexity === 'HIGH' ? '#fca5a5' : shipment.aiBriefing.customsComplexity === 'MEDIUM' ? '#fcd34d' : '#86efac',
+                      border: `1px solid ${shipment.aiBriefing.customsComplexity === 'HIGH' ? 'rgba(239,68,68,0.2)' : shipment.aiBriefing.customsComplexity === 'MEDIUM' ? 'rgba(245,158,11,0.2)' : 'rgba(34,197,94,0.2)'}`,
+                    }}>
+                      {shipment.aiBriefing.customsComplexity} CUSTOMS
+                    </span>
+                  )}
+                </td>
+                <td className="px-5 py-3.5">
+                  <RiskBadge level={shipment.aiRiskLevel || shipment.complianceReport?.riskLevel} />
                 </td>
                 <td className="px-5 py-3.5">
                   <StatusBadge status={shipment.status} />
@@ -80,7 +124,10 @@ export default function ShipmentTable({ shipments }: Props) {
           <Link key={shipment.id} to={`/shipments/${shipment.id}`} className="block p-4 hover:bg-slate-700/20 transition-colors">
             <div className="flex items-start justify-between mb-2">
               <span className="text-xs font-mono font-semibold text-amber-400">{shipment.trackingNumber}</span>
-              <StatusBadge status={shipment.status} />
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                <RiskBadge level={shipment.aiRiskLevel || shipment.complianceReport?.riskLevel} />
+                <StatusBadge status={shipment.status} />
+              </div>
             </div>
             <p className="text-sm font-medium text-slate-200">{shipment.title}</p>
             <div className="flex items-center gap-1.5 text-xs text-slate-500 mt-1.5">

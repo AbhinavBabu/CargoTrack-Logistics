@@ -16,41 +16,77 @@ const updateStatusSchema = z.object({
   description: z.string().optional(),
 });
 
+// ─── Internal AI service proxy helper ─────────────────────────────────────────
+
+async function proxyToAIInternal(
+  method: 'GET' | 'POST',
+  path: string,
+  body: unknown | undefined,
+  res: Response,
+  label: string,
+): Promise<void> {
+  const url = `${config.aiServiceUrl}${path}`;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (config.internalApiSecret) headers['x-internal-secret'] = config.internalApiSecret;
+
+  try {
+    const aiRes = await fetch(url, {
+      method,
+      headers,
+      ...(body !== undefined && method === 'POST' ? { body: JSON.stringify(body) } : {}),
+    });
+    const data = await aiRes.json();
+    res.status(aiRes.status).json(data);
+  } catch (err: any) {
+    console.error(`[admin-proxy] ${label} error:`, err.message);
+    res.status(503).json({ error: 'AI service unavailable', detail: err.message });
+  }
+}
+
+// ─── GET /api/admin/briefing/:shipmentId ─────────────────────────────────────
+
+router.get('/briefing/:shipmentId', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  await proxyToAIInternal('GET', `/api/briefing/${req.params.shipmentId}`, undefined, res, 'briefing');
+});
+
+// ─── POST /api/admin/briefing/generate/:shipmentId ────────────────────────────
+
+router.post('/briefing/generate/:shipmentId', authenticate, requireAdmin, async (req: Request, res: Response) => {
+  await proxyToAIInternal('POST', `/api/briefing/generate/${req.params.shipmentId}`, {}, res, 'briefing-generate');
+});
+
 // ─── GET /api/admin/stats ─────────────────────────────────────────────────────
 /**
  * @swagger
  * /api/admin/stats:
  *   get:
- *     summary: Platform-wide shipment statistics (admin)
+ *     summary: Platform-wide shipment statistics + risk distribution (admin)
  *     tags: [Admin]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Aggregate counts by status
+ *         description: Aggregate counts by status + risk distribution
  */
 router.get('/stats', authenticate, requireAdmin, async (_req: Request, res: Response) => {
   try {
-    const [total, byStatus, totalDocuments, recentShipments] = await Promise.all([
+    const [total, byStatus, totalDocuments, recentShipments, riskCounts] = await Promise.all([
       prisma.shipment.count(),
-      // Count shipments grouped by status
-      prisma.shipment.groupBy({
-        by: ['status'],
-        _count: { id: true },
-      }),
+      prisma.shipment.groupBy({ by: ['status'], _count: { id: true } }),
       prisma.shipmentDocument.count(),
-      // Last 7 days
-      prisma.shipment.count({
-        where: { createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } },
-      }),
+      prisma.shipment.count({ where: { createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } } }),
+      // Risk distribution — count shipments by AI risk level
+      prisma.shipment.groupBy({ by: ['aiRiskLevel'], _count: { id: true } }),
     ]);
 
-    // Shape into a flat object for easy consumption
-    const statusCounts = Object.fromEntries(
-      Object.values(ShipmentStatus).map((s) => [s, 0])
-    );
-    for (const row of byStatus) {
-      statusCounts[row.status] = row._count.id;
+    const statusCounts = Object.fromEntries(Object.values(ShipmentStatus).map((s) => [s, 0]));
+    for (const row of byStatus) statusCounts[row.status] = row._count.id;
+
+    // Build risk distribution map
+    const riskMap: Record<string, number> = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, UNASSESSED: 0 };
+    for (const row of riskCounts) {
+      const level = row.aiRiskLevel ?? 'UNASSESSED';
+      riskMap[level] = (riskMap[level] || 0) + row._count.id;
     }
 
     res.json({
@@ -58,12 +94,20 @@ router.get('/stats', authenticate, requireAdmin, async (_req: Request, res: Resp
       totalDocuments,
       recentShipments,
       byStatus: statusCounts,
+      // vNext: Risk intelligence distribution
+      riskDistribution: riskMap,
+      criticalCount: riskMap.CRITICAL,
+      highCount: riskMap.HIGH,
+      mediumCount: riskMap.MEDIUM,
+      clearCount: riskMap.LOW,
+      unassessedCount: riskMap.UNASSESSED,
     });
   } catch (error) {
     console.error('Admin stats error:', error);
     res.status(500).json({ error: 'Failed to fetch stats' });
   }
 });
+
 
 // ─── GET /api/admin/shipments ─────────────────────────────────────────────────
 /**
@@ -115,12 +159,35 @@ router.get('/shipments', authenticate, requireAdmin, async (req: Request, res: R
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [
+          // Sort by risk level severity first (CRITICAL first), then by date
+          { aiRiskLevel: 'desc' },
+          { createdAt: 'desc' },
+        ],
         include: {
           user: { select: { id: true, name: true, email: true } },
           trackingEvents: { orderBy: { timestamp: 'desc' }, take: 1 },
-          // Include compliance status so admin table can show it
-          complianceReport: { select: { status: true } },
+          complianceReport: {
+            select: {
+              status: true,
+              riskLevel: true,
+              overallRiskScore: true,
+              executiveSummary: true,
+              recommendedDisposition: true,
+              modelId: true,
+              updatedAt: true,
+            },
+          },
+          aiBriefing: {
+            select: {
+              corridor: true,
+              riskSummary: true,
+              customsComplexity: true,
+              sanctionsStatus: true,
+              delayProbability: true,
+              generatedAt: true,
+            },
+          },
           _count: { select: { documents: true } },
         },
       }),
@@ -131,6 +198,7 @@ router.get('/shipments', authenticate, requireAdmin, async (req: Request, res: R
       data: shipments,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
+
   } catch (error) {
     console.error('Admin list shipments error:', error);
     res.status(500).json({ error: 'Failed to fetch shipments' });

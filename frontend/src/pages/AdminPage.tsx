@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import api from '../api';
-import { PaginatedResponse, Shipment, ShipmentStatus } from '../types';
+import { PaginatedResponse, Shipment, ShipmentStatus, AdminStats } from '../types';
 import Layout from '../components/Layout';
 import { StatusBadge } from '../components/TrackingTimeline';
 import toast from 'react-hot-toast';
@@ -17,7 +17,6 @@ const STATUSES: ShipmentStatus[] = ['CREATED', 'PICKED_UP', 'IN_TRANSIT', 'OUT_F
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface AdminStats { total: number; totalDocuments: number; recentShipments: number; byStatus: Record<ShipmentStatus, number>; }
 interface Document { id: string; originalName: string; documentType: string; fileSize: number; uploadedAt: string; }
 
 interface ComplianceFinding { id: string; findingType: string; severity: string; description: string; evidence: string | null; reasoning: string | null; confidenceScore: number | null; recommendedAction: string | null; documentId: string | null; }
@@ -420,6 +419,17 @@ function DocumentDrawer({ shipment, onClose }: { shipment: Shipment; onClose: ()
     retry: false,
   });
 
+  // Route Intelligence Briefing — generated on shipment create
+  const { data: briefing } = useQuery<any>({
+    queryKey: ['admin-briefing', shipment.id],
+    queryFn: async () => {
+      const { data } = await api.get(`/admin/briefing/${shipment.id}`);
+      return data;
+    },
+    retry: false,
+    staleTime: 10 * 60 * 1000,
+  });
+
   // Copilot queries — auto-load on drawer open
   const { data: copilotSummary, isLoading: summaryLoading } = useQuery<CopilotSummary>({
     queryKey: ['copilot-summary', shipment.id],
@@ -492,6 +502,65 @@ function DocumentDrawer({ shipment, onClose }: { shipment: Shipment; onClose: ()
         </div>
 
         <div className="flex-1 p-5 space-y-7">
+
+          {/* ══ 0. Route Intelligence Briefing ═══════════════════════════ */}
+          {briefing && (
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <Route className="w-4 h-4 text-indigo-400" />
+                <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Route Intelligence</h3>
+              </div>
+              <div style={{
+                background: 'linear-gradient(135deg, rgba(15,23,42,0.95), rgba(30,41,59,0.95))',
+                border: '1px solid rgba(99,102,241,0.3)',
+                borderRadius: '12px',
+                padding: '14px',
+              }}>
+                <div style={{ color: '#a5b4fc', fontSize: '12px', fontWeight: 700, marginBottom: '6px' }}>{briefing.corridor}</div>
+                <p style={{ color: '#94a3b8', fontSize: '12px', lineHeight: 1.5, margin: '0 0 10px' }}>{briefing.riskSummary}</p>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                  {briefing.customsComplexity && (
+                    <span style={{
+                      padding: '3px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: 700,
+                      background: briefing.customsComplexity === 'HIGH' ? 'rgba(239,68,68,0.1)' : briefing.customsComplexity === 'MEDIUM' ? 'rgba(245,158,11,0.1)' : 'rgba(34,197,94,0.1)',
+                      color: briefing.customsComplexity === 'HIGH' ? '#fca5a5' : briefing.customsComplexity === 'MEDIUM' ? '#fcd34d' : '#86efac',
+                      border: `1px solid ${briefing.customsComplexity === 'HIGH' ? 'rgba(239,68,68,0.25)' : briefing.customsComplexity === 'MEDIUM' ? 'rgba(245,158,11,0.25)' : 'rgba(34,197,94,0.25)'}`,
+                    }}>⚙️ {briefing.customsComplexity} COMPLEXITY</span>
+                  )}
+                  {briefing.sanctionsStatus && (
+                    <span style={{
+                      padding: '3px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: 700,
+                      background: briefing.sanctionsStatus === 'BLOCKED' ? 'rgba(239,68,68,0.1)' : briefing.sanctionsStatus === 'WATCH' ? 'rgba(245,158,11,0.1)' : 'rgba(34,197,94,0.1)',
+                      color: briefing.sanctionsStatus === 'BLOCKED' ? '#fca5a5' : briefing.sanctionsStatus === 'WATCH' ? '#fcd34d' : '#86efac',
+                      border: `1px solid ${briefing.sanctionsStatus === 'BLOCKED' ? 'rgba(239,68,68,0.25)' : briefing.sanctionsStatus === 'WATCH' ? 'rgba(245,158,11,0.25)' : 'rgba(34,197,94,0.25)'}`,
+                    }}>{briefing.sanctionsStatus === 'CLEAR' ? '✓' : '⚠'} {briefing.sanctionsStatus}</span>
+                  )}
+                  {briefing.estimatedClearanceHours && (
+                    <span style={{ padding: '3px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: 600, background: 'rgba(148,163,184,0.08)', color: '#94a3b8', border: '1px solid rgba(148,163,184,0.2)' }}>
+                      ⏱ ~{briefing.estimatedClearanceHours}h clearance
+                    </span>
+                  )}
+                  {typeof briefing.delayProbability === 'number' && (
+                    <span style={{ padding: '3px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: 600, background: 'rgba(148,163,184,0.08)', color: '#94a3b8', border: '1px solid rgba(148,163,184,0.2)' }}>
+                      {Math.round(briefing.delayProbability * 100)}% delay risk
+                    </span>
+                  )}
+                </div>
+                {briefing.requiredDocuments?.length > 0 && (
+                  <div>
+                    <div style={{ color: '#64748b', fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '5px' }}>Required Documents</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                      {briefing.requiredDocuments.map((doc: string, i: number) => (
+                        <span key={i} style={{ padding: '2px 8px', background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: '10px', color: '#a5b4fc', fontSize: '10px' }}>
+                          {doc}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
 
           {/* ══ 1. AI Executive Brief ════════════════════════════════════ */}
           <section>
@@ -647,7 +716,46 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* Stats */}
+        {/* ── Intelligence Operations Dashboard ───────────────────────── */}
+        {stats && (
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(15,23,42,0.9) 0%, rgba(30,41,59,0.9) 100%)',
+            border: '1px solid rgba(99,102,241,0.25)',
+            borderRadius: '16px',
+            padding: '20px 24px',
+            marginBottom: '4px',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px' }}>✦</div>
+                <div>
+                  <div style={{ color: '#e2e8f0', fontSize: '14px', fontWeight: 700 }}>Fleet Risk Intelligence</div>
+                  <div style={{ color: '#64748b', fontSize: '11px' }}>Real-time AI-assessed risk distribution · Nova Lite</div>
+                </div>
+              </div>
+              <div style={{ color: '#64748b', fontSize: '11px' }}>{stats.total} shipments · {stats.unassessedCount ?? 0} pending analysis</div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+              {[
+                { label: 'CRITICAL', count: stats.criticalCount ?? 0, color: '#ef4444', bg: 'rgba(239,68,68,0.1)', border: 'rgba(239,68,68,0.3)', icon: '🔴' },
+                { label: 'HIGH',     count: stats.highCount     ?? 0, color: '#f97316', bg: 'rgba(249,115,22,0.1)', border: 'rgba(249,115,22,0.3)', icon: '🟠' },
+                { label: 'MEDIUM',   count: stats.mediumCount   ?? 0, color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.3)', icon: '🟡' },
+                { label: 'CLEAR',    count: stats.clearCount    ?? 0, color: '#22c55e', bg: 'rgba(34,197,94,0.1)',  border: 'rgba(34,197,94,0.3)',  icon: '🟢' },
+              ].map(({ label, count, color, bg, border, icon }) => (
+                <div key={label} style={{
+                  background: bg, border: `1px solid ${border}`,
+                  borderRadius: '12px', padding: '14px 16px', textAlign: 'center',
+                }}>
+                  <div style={{ fontSize: '20px', marginBottom: '4px' }}>{icon}</div>
+                  <div style={{ color, fontSize: '26px', fontWeight: 800, lineHeight: 1 }}>{count}</div>
+                  <div style={{ color, fontSize: '10px', fontWeight: 700, letterSpacing: '0.1em', marginTop: '4px' }}>{label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Standard stats row */}
         {stats && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <StatCard icon={Package} label="Total Shipments" value={stats.total} color="bg-amber-500/10 text-amber-400 border border-amber-500/20" />
@@ -682,7 +790,7 @@ export default function AdminPage() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-slate-700/50 bg-slate-800/80">
-                      {['Tracking #', 'Shipment', 'Customer', 'Route', 'Status', 'Docs', 'Update'].map((h) => (
+                      {['Tracking #', 'Shipment', 'Customer', 'Route', 'AI Risk', 'Status', 'Docs', 'Update'].map((h) => (
                         <th key={h} className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">{h}</th>
                       ))}
                     </tr>
@@ -691,10 +799,24 @@ export default function AdminPage() {
                     {(data?.data || []).map((shipment) => (
                       <tr key={shipment.id} className="hover:bg-slate-700/20 transition-colors cursor-pointer">
                         <td className="px-5 py-3.5" onClick={() => setSelectedShipment(shipment)}><span className="text-xs font-mono font-semibold text-amber-400">{shipment.trackingNumber}</span></td>
-                        <td className="px-5 py-3.5" onClick={() => setSelectedShipment(shipment)}><p className="text-sm font-medium text-slate-200">{shipment.title}</p></td>
+                        <td className="px-5 py-3.5" onClick={() => setSelectedShipment(shipment)}><p className="text-sm font-medium text-slate-200">{shipment.title}</p><p className="text-xs text-slate-600 mt-0.5">{shipment.shipmentType}</p></td>
                         <td className="px-5 py-3.5" onClick={() => setSelectedShipment(shipment)}><div className="flex items-center gap-1.5"><User className="w-3 h-3 text-slate-600" /><span className="text-sm text-slate-400">{(shipment as any).user?.name || 'Unknown'}</span></div></td>
                         <td className="px-5 py-3.5" onClick={() => setSelectedShipment(shipment)}><div className="flex items-center gap-1.5 text-xs text-slate-500"><MapPin className="w-3 h-3 text-slate-600 flex-shrink-0" /><span className="truncate max-w-[80px]">{shipment.origin}</span><span className="text-slate-700">→</span><span className="truncate max-w-[80px]">{shipment.destination}</span></div></td>
-                        <td className="px-5 py-3.5" onClick={() => setSelectedShipment(shipment)}><StatusBadge status={shipment.status} /></td>
+                        <td className="px-5 py-3.5" onClick={() => setSelectedShipment(shipment)}>
+                          {shipment.aiRiskLevel ? (
+                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold border ${
+                              shipment.aiRiskLevel === 'CRITICAL' ? 'bg-red-500/10 border-red-500/30 text-red-400' :
+                              shipment.aiRiskLevel === 'HIGH'     ? 'bg-orange-500/10 border-orange-500/30 text-orange-400' :
+                              shipment.aiRiskLevel === 'MEDIUM'   ? 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400' :
+                                                                    'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                            }`}>
+                              {shipment.aiRiskLevel === 'CRITICAL' ? '🔴' : shipment.aiRiskLevel === 'HIGH' ? '🟠' : shipment.aiRiskLevel === 'MEDIUM' ? '🟡' : '🟢'}
+                              {' '}{shipment.aiRiskLevel}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-slate-600 italic">Pending...</span>
+                          )}
+                        </td>
                         <td className="px-5 py-3.5" onClick={() => setSelectedShipment(shipment)}><div className="flex items-center gap-1 text-xs text-slate-500"><FileText className="w-3 h-3" /><span>{(shipment as any)._count?.documents ?? 0}</span></div></td>
                         <td className="px-5 py-3.5">
                           <div className="relative">

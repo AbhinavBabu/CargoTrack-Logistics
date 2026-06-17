@@ -149,8 +149,11 @@ services:
       S3_BUCKET: ${S3_BUCKET:-}
       DYNAMO_AUDIT_TABLE: ${DYNAMO_AUDIT_TABLE:-cargotrack-audit}
       INTERNAL_API_SECRET: ${INTERNAL_API_SECRET:-}
-      # Set MOCK_AGENT=false when real AWS credentials are provided
-      MOCK_AGENT: ${MOCK_AGENT:-true}
+      # vNext: MOCK_AGENT is no longer needed. Bedrock is always primary.
+      # If AWS_DEFAULT_REGION is not set, the Bedrock client won't initialize
+      # and the runner automatically falls back to mock agent.
+      # To run against real Bedrock: set AWS_DEFAULT_REGION + inject AWS credentials.
+      MOCK_AGENT: ${MOCK_AGENT:-false}
       # Extractor fallback chain: Textract → PDF → OCR → Mock
       # Set TEXTRACT_ENABLED=true when AWS_DEFAULT_REGION + S3_BUCKET are configured
       TEXTRACT_ENABLED: ${TEXTRACT_ENABLED:-false}

@@ -5,6 +5,7 @@ import { authenticate } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { notificationProvider } from '../providers/notification';
 import { eventPublisher } from '../providers/event';
+import { config } from '../config';
 
 const prisma = new PrismaClient();
 const router = Router();
@@ -13,6 +14,25 @@ function generateTrackingNumber(): string {
   const year = new Date().getFullYear();
   const random = Math.floor(100000 + Math.random() * 900000);
   return `CT-${year}-${random}`;
+}
+
+// ─── Internal call helper ──────────────────────────────────────────────────────
+// Reuse across briefing + compliance triggers from the shipment create path.
+
+async function callAiService(path: string, method: 'POST' | 'GET' = 'POST', body?: unknown): Promise<void> {
+  const url = `${config.aiServiceUrl}${path}`;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (config.internalApiSecret) headers['x-internal-secret'] = config.internalApiSecret;
+
+  const res = await fetch(url, {
+    method,
+    headers,
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`ai-service ${path} failed (${res.status}): ${text}`);
+  }
 }
 
 const createShipmentSchema = z.object({
@@ -25,6 +45,15 @@ const createShipmentSchema = z.object({
   weight: z.number().positive('Weight must be positive'),
   description: z.string().optional(),
   estimatedDeliveryDate: z.string().optional(),
+  // ── vNext: extended intelligence fields ────────────────────────────────────
+  carrierName: z.string().optional(),
+  commodityType: z.string().optional(),
+  hsCodeHint: z.string().optional(),
+  isDangerousGoods: z.boolean().optional().default(false),
+  dangerousGoodsClass: z.string().optional(),
+  incoterms: z.string().optional(),
+  declaredValue: z.number().positive().optional(),
+  currencyCode: z.string().optional().default('USD'),
 });
 
 const updateShipmentSchema = z.object({
@@ -37,6 +66,10 @@ const updateShipmentSchema = z.object({
   weight: z.number().positive().optional(),
   description: z.string().optional(),
   estimatedDeliveryDate: z.string().optional(),
+  carrierName: z.string().optional(),
+  commodityType: z.string().optional(),
+  incoterms: z.string().optional(),
+  declaredValue: z.number().positive().optional(),
 });
 
 /**
@@ -47,19 +80,6 @@ const updateShipmentSchema = z.object({
  *     tags: [Shipments]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: page
- *         schema: { type: integer, default: 1 }
- *       - in: query
- *         name: limit
- *         schema: { type: integer, default: 10 }
- *       - in: query
- *         name: status
- *         schema: { type: string }
- *       - in: query
- *         name: search
- *         schema: { type: string }
  *     responses:
  *       200:
  *         description: List of shipments
@@ -89,19 +109,18 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
-        include: { trackingEvents: { orderBy: { timestamp: 'desc' }, take: 1 } },
+        include: {
+          trackingEvents: { orderBy: { timestamp: 'desc' }, take: 1 },
+          complianceReport: { select: { status: true, riskLevel: true, overallRiskScore: true } },
+          aiBriefing: { select: { sanctionsStatus: true, customsComplexity: true, delayProbability: true } },
+        },
       }),
       prisma.shipment.count({ where }),
     ]);
 
     res.json({
       data: shipments,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   } catch (error) {
     console.error('List shipments error:', error);
@@ -113,27 +132,10 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
  * @swagger
  * /api/shipments:
  *   post:
- *     summary: Create a new shipment
+ *     summary: Create a new shipment (auto-triggers AI briefing + compliance)
  *     tags: [Shipments]
  *     security:
  *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [title, senderName, receiverName, origin, destination, shipmentType, weight]
- *             properties:
- *               title: { type: string }
- *               senderName: { type: string }
- *               receiverName: { type: string }
- *               origin: { type: string }
- *               destination: { type: string }
- *               shipmentType: { type: string }
- *               weight: { type: number }
- *               description: { type: string }
- *               estimatedDeliveryDate: { type: string }
  *     responses:
  *       201:
  *         description: Shipment created
@@ -141,15 +143,35 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
 router.post('/', authenticate, validate(createShipmentSchema), async (req: Request, res: Response) => {
   try {
     const trackingNumber = generateTrackingNumber();
+    const {
+      title, senderName, receiverName, origin, destination, shipmentType,
+      weight, description, estimatedDeliveryDate,
+      carrierName, commodityType, hsCodeHint, isDangerousGoods, dangerousGoodsClass,
+      incoterms, declaredValue, currencyCode,
+    } = req.body;
+
     const shipment = await prisma.shipment.create({
       data: {
-        ...req.body,
         trackingNumber,
         userId: req.user!.userId,
-        weight: parseFloat(req.body.weight),
-        estimatedDeliveryDate: req.body.estimatedDeliveryDate
-          ? new Date(req.body.estimatedDeliveryDate)
-          : null,
+        title,
+        senderName,
+        receiverName,
+        origin,
+        destination,
+        shipmentType,
+        weight: parseFloat(weight),
+        description: description || null,
+        estimatedDeliveryDate: estimatedDeliveryDate ? new Date(estimatedDeliveryDate) : null,
+        // vNext fields
+        carrierName: carrierName || null,
+        commodityType: commodityType || null,
+        hsCodeHint: hsCodeHint || null,
+        isDangerousGoods: isDangerousGoods || false,
+        dangerousGoodsClass: dangerousGoodsClass || null,
+        incoterms: incoterms || null,
+        declaredValue: declaredValue || null,
+        currencyCode: currencyCode || 'USD',
       },
     });
 
@@ -158,27 +180,42 @@ router.post('/', authenticate, validate(createShipmentSchema), async (req: Reque
       data: {
         shipmentId: shipment.id,
         status: ShipmentStatus.CREATED,
-        description: 'Shipment has been created',
-        location: req.body.origin,
+        description: 'Shipment created — AI route intelligence briefing initiated',
+        location: origin,
       },
     });
 
-    // Send notification
-    await notificationProvider.send(
+    // Respond immediately — don't block on AI calls
+    res.status(201).json(shipment);
+
+    // ── Fire-and-forget: Route Intelligence Briefing (fast, ~3s) ────────────
+    callAiService(`/api/briefing/generate/${shipment.id}`)
+      .catch((err) => console.error(`[shipments] Briefing trigger failed for ${shipment.id}:`, err));
+
+    // ── Fire-and-forget: Initial Compliance Assessment ───────────────────────
+    // Run immediately on create — no documents yet, but Nova assesses route
+    // risk, DG risk from cargo type, and produces a preliminary briefing.
+    callAiService('/api/compliance/trigger', 'POST', {
+      shipmentId: shipment.id,
+      trackingNumber,
+      newStatus: ShipmentStatus.CREATED,
+      triggeredAt: new Date().toISOString(),
+    }).catch((err) => console.error(`[shipments] Initial compliance trigger failed for ${shipment.id}:`, err));
+
+    // Notify + publish event (also fire-and-forget after response)
+    notificationProvider.send(
       req.user!.userId,
       'Shipment Created',
-      `Your shipment ${trackingNumber} has been created successfully.`
-    );
+      `Your shipment ${trackingNumber} has been created. AI is analyzing the route now.`
+    ).catch(() => {});
+    eventPublisher.publish('shipment.created', { trackingNumber, shipmentId: shipment.id }).catch(() => {});
 
-    // Publish event
-    await eventPublisher.publish('shipment.created', { trackingNumber, shipmentId: shipment.id });
-
-    res.status(201).json(shipment);
   } catch (error) {
     console.error('Create shipment error:', error);
     res.status(500).json({ error: 'Failed to create shipment' });
   }
 });
+
 
 /**
  * @swagger

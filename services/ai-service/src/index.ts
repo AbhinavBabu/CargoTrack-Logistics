@@ -4,6 +4,7 @@ import { config } from './config';
 import healthRoutes from './routes/health';
 import triggerRoutes from './routes/trigger';
 import copilotRoutes from './routes/copilot';
+import briefingRoutes from './routes/briefing';
 import { complianceHandler } from './handlers/complianceHandler';
 
 const app = express();
@@ -14,13 +15,14 @@ app.use(express.json());
 app.use('/api/health', healthRoutes);
 
 // Compliance trigger — internal service-to-service endpoint
-// Allows core-service admin panel to start a compliance check directly
-// without needing SQS/EventBridge in local dev.
 app.use('/api/compliance', triggerRoutes);
 
-// Copilot — Shipment Intelligence Copilot endpoints
-// 7 AI capabilities: summary, explain-risk, recommendations, ask, similar, timeline
+// Copilot — Shipment Intelligence Copilot endpoints (7 capabilities)
 app.use('/api/copilot', copilotRoutes);
+
+// Briefing — Route Intelligence Briefing (generated on shipment create)
+app.use('/api/briefing', briefingRoutes);
+
 
 // Start the SQS compliance polling loop (non-blocking)
 // In mock mode, this is a no-op.
