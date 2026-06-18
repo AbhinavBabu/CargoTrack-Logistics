@@ -299,7 +299,7 @@ resource "kubernetes_manifest" "argocd_root_app" {
       project = "default"
       source = {
         repoURL        = "https://github.com/AbhinavBabu/Cargotrack-Logistics.git"
-        targetRevision = "cargotrack-v3-microservices"
+        targetRevision = "cargotrack-terraform-v2"
         path           = "gitops/apps"
       }
       destination = {

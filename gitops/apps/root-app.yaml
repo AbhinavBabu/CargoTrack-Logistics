@@ -12,8 +12,8 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/AbhinavBabu/cargotrack-v2.git
-    targetRevision: cargotrack-v3-microservices
+    repoURL: https://github.com/AbhinavBabu/CargoTrack-Logistics.git
+    targetRevision: cargotrack-terraform-v2
     path: gitops/apps
   destination:
     server: https://kubernetes.default.svc
