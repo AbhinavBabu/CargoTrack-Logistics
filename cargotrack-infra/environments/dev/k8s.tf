@@ -245,7 +245,167 @@ resource "kubernetes_secret" "cargotrack_secrets" {
   ]
 }
 
-# ── ArgoCD ────────────────────────────────────────────────────────────────────
+# ── cargotrack-aws-config ConfigMap ───────────────────────────────────────────
+# WHY TERRAFORM (not Helm) creates this ConfigMap:
+#
+#   The Helm chart's configmap.yaml template renders DATABASE_HOST and other
+#   AWS resource identifiers from values-dev.yaml. Those values are empty in
+#   Git (they are Terraform outputs, not static values). ArgoCD deploys from
+#   Git — whatever is in the file at commit time is what gets deployed.
+#   Result: DATABASE_HOST = "" → init container fails: nc: bad address ''.
+#
+#   There is no way to make ArgoCD inject dynamic Terraform output values into
+#   a Helm values file without a commit/push cycle after apply, which violates
+#   the platform requirement.
+#
+#   SOLUTION: Terraform creates the ConfigMap directly using native Terraform
+#   resource outputs. This is identical to how kubernetes_secret.cargotrack_secrets
+#   is created. The Helm chart's configmap.yaml template is removed — ArgoCD
+#   no longer owns or manages this ConfigMap.
+#
+# DEPENDENCY CHAIN:
+#   module.database (RDS endpoint available)
+#   module.eventing (EventBridge + SQS URLs available)
+#   module.audit (DynamoDB table name available)
+#   module.storage (S3 bucket name available)
+#     → kubernetes_config_map.cargotrack_aws_config (created with real values)
+#       → ArgoCD syncs Deployments → pods read ConfigMap → DATABASE_HOST populated
+#
+# DESTROY: Terraform destroys this ConfigMap when `terraform destroy` is run.
+# No orphaned ConfigMaps after destroy.
+
+resource "kubernetes_config_map" "cargotrack_aws_config" {
+  metadata {
+    name      = "cargotrack-aws-config"
+    namespace = kubernetes_namespace.cargotrack.metadata[0].name
+    labels = {
+      "app.kubernetes.io/managed-by" = "Terraform"
+      "app.kubernetes.io/part-of"    = "cargotrack"
+    }
+  }
+
+  # module.database.db_endpoint returns "hostname:port" — strip the port suffix
+  # with split() so DATABASE_HOST contains only the hostname (required by nc -z
+  # and by Prisma which constructs its own connection string).
+  data = {
+    AWS_DEFAULT_REGION       = var.aws_region
+    DATABASE_HOST            = split(":", module.database.db_endpoint)[0]
+    DATABASE_PORT            = "5432"
+    DATABASE_NAME            = "cargotrack"
+    DATABASE_USER            = "cargotrack"
+    S3_BUCKET                = module.storage.bucket_id
+    EVENT_BUS_NAME           = module.eventing.event_bus_name
+    SQS_COMPLIANCE_QUEUE_URL = module.eventing.compliance_queue_url
+    DYNAMO_AUDIT_TABLE       = module.audit.table_name
+    DB_SECRET_ARN            = module.database.db_secret_arn
+    APP_SECRET_ARN           = module.database.application_secret_arn
+  }
+
+  depends_on = [
+    kubernetes_namespace.cargotrack,
+    module.database,
+    module.storage,
+    module.eventing,
+    module.audit,
+  ]
+}
+
+# ── cargotrack-dev ArgoCD Application (IRSA role ARN injection) ───────────────
+# WHY THIS EXISTS:
+#
+#   The cargotrack-dev ArgoCD Application deploys the Helm chart from Git.
+#   The Helm chart ServiceAccount manifests require IRSA role ARNs in their
+#   eks.amazonaws.com/role-arn annotations. These ARNs are Terraform outputs
+#   and cannot be committed to values-dev.yaml without a post-apply edit cycle.
+#
+#   This kubernetes_manifest patches the cargotrack-dev Application to inject
+#   helm.parameters that override the serviceAccount.roleArn values for each
+#   service. ArgoCD passes these parameters to Helm at sync time, exactly as
+#   if they were present in values-dev.yaml — with no commit required.
+#
+#   This is the ArgoCD-native way to inject dynamic values into a Helm
+#   release managed by ArgoCD. It is idempotent and survives re-apply.
+#
+# DESTROY: This manifest is destroyed before ArgoCD is uninstalled (via
+# depends_on graph reversal), so the Application CR is cleaned up correctly.
+
+resource "kubernetes_manifest" "cargotrack_dev_app" {
+  manifest = {
+    apiVersion = "argoproj.io/v1alpha1"
+    kind       = "Application"
+    metadata = {
+      name      = "cargotrack-dev"
+      namespace = "argocd"
+      # finalizers intentionally omitted (same reasoning as argocd_root_app)
+    }
+    spec = {
+      project = "default"
+      source = {
+        repoURL        = "https://github.com/AbhinavBabu/CargoTrack-Logistics.git"
+        targetRevision = "cargotrack-terraform-v2"
+        path           = "helm/cargotrack"
+        helm = {
+          valueFiles = [
+            "values.yaml",
+            "values-dev.yaml",
+          ]
+          # IRSA role ARNs injected by Terraform — these override the empty
+          # roleArn fields in values-dev.yaml without requiring a file edit.
+          parameters = [
+            {
+              name  = "coreService.serviceAccount.roleArn"
+              value = module.irsa.core_service_role_arn
+            },
+            {
+              name  = "documentService.serviceAccount.roleArn"
+              value = module.irsa.document_service_role_arn
+            },
+            {
+              name  = "aiService.serviceAccount.roleArn"
+              value = module.irsa.ai_service_role_arn
+            },
+          ]
+        }
+      }
+      destination = {
+        server    = "https://kubernetes.default.svc"
+        namespace = "cargotrack"
+      }
+      syncPolicy = {
+        automated = {
+          prune    = true
+          selfHeal = true
+        }
+        syncOptions = [
+          "CreateNamespace=true",
+          "ServerSideApply=true",
+        ]
+        retry = {
+          limit = 3
+          backoff = {
+            duration    = "5s"
+            maxDuration = "3m"
+            factor      = 2
+          }
+        }
+      }
+    }
+  }
+
+  field_manager {
+    force_conflicts = true
+  }
+
+  depends_on = [
+    helm_release.argocd,
+    kubernetes_namespace.cargotrack,
+    kubernetes_config_map.cargotrack_aws_config,
+    kubernetes_secret.cargotrack_secrets,
+    module.irsa,
+  ]
+}
+
+
 # Installed after LBC — ArgoCD server NLB is created by the LBC.
 #
 # The root Application CR is created by a SEPARATE kubernetes_manifest resource
@@ -418,9 +578,11 @@ resource "kubernetes_manifest" "argocd_root_app" {
     metadata = {
       name      = "root-app"
       namespace = "argocd"
-      # NO finalizer — ALB cleanup is handled by null_resource.pre_destroy_ingress_cleanup.
-      # Removing the finalizer makes this deletion instant, preventing destroy timeouts.
-      finalizers = []
+      # finalizers intentionally omitted:
+      #   Setting finalizers = [] causes a provider inconsistency error because
+      #   the K8s API returns null for empty finalizers, not []. Omitting the key
+      #   tells the kubernetes SSA field manager not to manage this field at all.
+      #   The cascade-delete finalizer was already removed from the live resource.
     }
     spec = {
       project = "default"
@@ -452,6 +614,7 @@ resource "kubernetes_manifest" "argocd_root_app" {
   depends_on = [
     helm_release.argocd,
     kubernetes_namespace.argocd,
+    kubernetes_manifest.cargotrack_dev_app,
     # This dependency ensures that on DESTROY, the null_resource is destroyed
     # BEFORE this Application CR is deleted (Terraform reverses the graph).
     # Destroy order: argocd_root_app → null_resource (cleanup) → argocd → LBC

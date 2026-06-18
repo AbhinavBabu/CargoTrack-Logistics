@@ -58,8 +58,29 @@ spec:
               app: document-service
 
       # ── Pod-level security context ─────────────────────────────────────────
+      # fsGroup: 1000 — kubelet sets group ownership on mounted volumes to 1000
+      # (matching runAsUser: 1000 below), making them writable without root.
       securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
         fsGroup: 1000
+
+      # ── Volumes ───────────────────────────────────────────────────────────────
+      # /uploads — ephemeral scratch space for document-service.
+      #
+      # The document-service Node.js app calls mkdir('/uploads') at startup.
+      # Mounting an emptyDir here means:
+      #   1. The directory EXISTS before the container starts (kubelet creates it)
+      #   2. The container does NOT need to create it → no EACCES error
+      #   3. The directory is writable because fsGroup: 1000 sets group ownership
+      #
+      # emptyDir is correct here because document-service uploads are forwarded
+      # to S3 (module.storage.bucket_id). The /uploads path is only a temporary
+      # staging area — persistence across pod restarts is not required.
+      # If durable local storage becomes necessary, replace with a PVC.
+      volumes:
+        - name: uploads-scratch
+          emptyDir: {}
 
       containers:
         - name: document-service
@@ -120,6 +141,14 @@ spec:
             timeoutSeconds: 5
             failureThreshold: 3
             successThreshold: 1
+
+          # ── /uploads volume mount ─────────────────────────────────────────
+          # Mount the emptyDir at the path the app tries to mkdir at startup.
+          # The kubelet creates the directory with group 1000 (fsGroup) before
+          # the container starts — no EACCES: permission denied.
+          volumeMounts:
+            - name: uploads-scratch
+              mountPath: /uploads
 
           # ── Container-level security context ──────────────────────────────
           securityContext:
