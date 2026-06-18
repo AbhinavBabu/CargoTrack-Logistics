@@ -12,7 +12,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/AbhinavBabu/cargotrack-v2.git
+    repoURL: https://github.com/AbhinavBabu/CargoTrack-Logistics.git
     targetRevision: cargotrack-terraform-v2
     path: helm/cargotrack
     helm:
