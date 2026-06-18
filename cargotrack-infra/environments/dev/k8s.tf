@@ -8,45 +8,23 @@
 #   4. Cluster Autoscaler            — kube-system  (least-waste expander)
 #   5. cargotrack-secrets K8s Secret — cargotrack   (from Secrets Manager, no CRDs)
 #   6. ArgoCD                        — argocd        (depends on LBC for NLB)
-#   7. ArgoCD App-of-Apps CR         — argocd        (bootstrapped via Helm values)
+#   7. null_resource pre-destroy     — (no-op on apply; cleans Ingress on destroy)
+#   8. ArgoCD App-of-Apps CR         — argocd        (kubernetes_manifest, no finalizer)
 #
-# Destroy order is automatic: Terraform reverses the dependency graph.
-#   App-of-Apps CR → ArgoCD → cargotrack-secrets → Cluster Autoscaler
-#   → Metrics Server → LBC → namespaces
+# Destroy order (reversed dependency graph):
+#   argocd_root_app → null_resource (ingress cleanup) → argocd → cargotrack_secrets
+#   → cluster_autoscaler → metrics_server → aws_load_balancer_controller → namespaces
 #
-# ── Bootstrap guarantee ───────────────────────────────────────────────────────
-# ALL resources in this file use only:
-#   • helm_release          — native Terraform, no CRD dependency
-#   • kubernetes_namespace  — native Terraform, no CRD dependency
-#   • kubernetes_secret     — native Terraform, no CRD dependency
-#   • kubernetes_manifest   — ONLY for the ArgoCD Application CR, which is
-#                             bootstrapped via the ArgoCD Helm chart's
-#                             server.additionalApplications values (the CRDs
-#                             are installed by Helm before this manifest runs)
-#
-# kubernetes_manifest.argocd_root_app: the argoproj.io/v1alpha1/Application CRD
-# is installed by helm_release.argocd (wait=true). Terraform applies the Helm
-# release FIRST (depends_on enforces this), then applies the manifest. The CRD
-# is guaranteed to exist when kubernetes_manifest.argocd_root_app is processed.
-#
-# IMPORTANT: On a completely fresh cluster, terraform plan is run against the
-# live K8s API. If kubernetes_manifest resources try to resolve CRD schemas
-# during plan and CRDs don't yet exist, the plan fails. To avoid this:
-#   • kubernetes_manifest is used ONLY for ArgoCD Application (argoproj.io CRD)
-#   • ESO is NOT used — secrets are created with kubernetes_secret (no CRD)
-#   • kubernetes_manifest.argocd_root_app is kept because the kubernetes
-#     provider ≥ 2.31 defers CRD schema resolution to apply time when the
-#     resource type is not found during plan (it will warn, not fail).
-#     If you observe plan failures on a fresh cluster, replace with:
-#       helm set server.additionalApplications (see comment near resource)
+# Single-apply guarantee:
+#   All resources use native K8s types or Helm releases — no ESO CRDs.
+#   kubernetes_manifest for the ArgoCD Application CR depends on helm_release.argocd
+#   (wait=true), which installs the argoproj.io CRDs before the manifest is applied.
 # =============================================================================
 
-# ── Locals: read secret values from Secrets Manager ───────────────────────────
-# Terraform reads these from the AWS API (not Kubernetes), so they are always
-# resolvable as long as module.database has been applied in the same run.
-# The database and application secrets are created by module.database and
-# their values flow directly into the Kubernetes Secret below — no operator,
-# no CRD, no second apply required.
+# ── Read secret values from Secrets Manager ───────────────────────────────────
+# Resolved from the AWS API (not Kubernetes) — always available in a single apply.
+# The database and application secrets are created and populated by module.database
+# in the same apply. No operator, no CRD, no second apply.
 
 data "aws_secretsmanager_secret_version" "database" {
   secret_id = module.database.db_secret_arn
@@ -85,8 +63,8 @@ resource "kubernetes_namespace" "cargotrack" {
 }
 
 # ── AWS Load Balancer Controller ──────────────────────────────────────────────
-# Uses the IRSA role created in modules/irsa: cargotrack-irsa-alb-controller
-# The service account name MUST match the IRSA trust policy subject:
+# Uses IRSA role cargotrack-irsa-alb-controller.
+# ServiceAccount must match IRSA trust policy subject:
 #   system:serviceaccount:kube-system:aws-load-balancer-controller
 
 resource "helm_release" "aws_load_balancer_controller" {
@@ -105,9 +83,7 @@ resource "helm_release" "aws_load_balancer_controller" {
     value = module.eks.cluster_name
   }
 
-  # AL2023 nodes block EC2 Instance Metadata Service (IMDS) by default.
-  # Without this, the controller logs: "failed to introspect vpcID from EC2Metadata"
-  # Sourced from module.networking — never hardcoded.
+  # AL2023 nodes block IMDS by default — pass VPC ID explicitly.
   set {
     name  = "vpcId"
     value = module.networking.vpc_id
@@ -123,7 +99,6 @@ resource "helm_release" "aws_load_balancer_controller" {
     value = "aws-load-balancer-controller"
   }
 
-  # Annotate the ServiceAccount with the IRSA role ARN — no static keys
   set {
     name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
     value = module.irsa.alb_controller_role_arn
@@ -142,15 +117,8 @@ resource "helm_release" "aws_load_balancer_controller" {
 }
 
 # ── Metrics Server ────────────────────────────────────────────────────────────
-# Required for HPA to read pod CPU/memory metrics.
-# No IRSA needed — metrics-server uses in-cluster RBAC permissions.
-#
-# --kubelet-preferred-address-types=InternalIP
-#   Required because nodes are in private subnets (no public hostname).
-# --kubelet-insecure-tls
-#   Required because EKS managed nodes use self-signed kubelet certificates.
-#   Without this flag, metrics-server fails TLS verification and cannot
-#   collect node/pod metrics (HPA stops working silently).
+# Required for HPA. --kubelet-insecure-tls needed for EKS self-signed certs.
+# --kubelet-preferred-address-types=InternalIP needed for private-subnet nodes.
 
 resource "helm_release" "metrics_server" {
   name       = "metrics-server"
@@ -168,7 +136,6 @@ resource "helm_release" "metrics_server" {
     value = "--kubelet-preferred-address-types=InternalIP"
   }
 
-  # Needed for EKS managed node self-signed kubelet certs
   set {
     name  = "args[1]"
     value = "--kubelet-insecure-tls"
@@ -181,12 +148,8 @@ resource "helm_release" "metrics_server" {
 }
 
 # ── Cluster Autoscaler ────────────────────────────────────────────────────────
-# Uses the IRSA role created in modules/irsa: cargotrack-irsa-cluster-autoscaler
-# The node group in modules/eks already has the required discovery tags:
-#   k8s.io/cluster-autoscaler/enabled             = "true"
-#   k8s.io/cluster-autoscaler/cargotrack          = "owned"
-# The service account name MUST match the IRSA trust policy subject:
-#   system:serviceaccount:kube-system:cluster-autoscaler
+# Uses IRSA role cargotrack-irsa-cluster-autoscaler.
+# Node group in modules/eks has the required auto-discovery tags.
 
 resource "helm_release" "cluster_autoscaler" {
   name       = "cluster-autoscaler"
@@ -219,14 +182,11 @@ resource "helm_release" "cluster_autoscaler" {
     value = "cluster-autoscaler"
   }
 
-  # Annotate the ServiceAccount with the IRSA role ARN
   set {
     name  = "rbac.serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
     value = module.irsa.cluster_autoscaler_role_arn
   }
 
-  # least-waste: scale to the node type that wastes fewest resources
-  # More predictable than "random" for demos and single-node-group clusters
   set {
     name  = "extraArgs.expander"
     value = "least-waste"
@@ -250,40 +210,9 @@ resource "helm_release" "cluster_autoscaler" {
 }
 
 # ── cargotrack-secrets Kubernetes Secret ──────────────────────────────────────
-# Creates the cargotrack-secrets Secret directly from Terraform-managed values.
-#
-# WHY NOT External Secrets Operator (ESO)?
-#
-# ESO requires:
-#   1. A Helm chart to install the operator (installs ESO CRDs)
-#   2. kubernetes_manifest for ClusterSecretStore (requires ESO CRDs at plan time)
-#   3. kubernetes_manifest for ExternalSecret (requires ESO CRDs at plan time)
-#
-# The hashicorp/kubernetes provider's kubernetes_manifest resource validates
-# the resource schema against the live K8s API during PLAN, not just APPLY.
-# On a fresh cluster where ESO is not yet installed, the CRDs don't exist,
-# so Terraform PLAN fails — even though depends_on would ensure correct APPLY
-# order. This is a fundamental limitation of the kubernetes_manifest resource.
-#
-# The result: ESO requires TWO applies on a fresh cluster. This violates the
-# platform requirement of a single terraform apply from a destroyed state.
-#
-# WHY THIS APPROACH IS CORRECT:
-#
-# The secret values are ALREADY managed by Terraform — they are generated by
-# random_password resources in module.database and written to Secrets Manager
-# by Terraform itself. Terraform can read them back directly from the module
-# outputs (which reference the same resource values), create the Kubernetes
-# Secret in one apply, and destroy it cleanly in one destroy.
-#
-# No operator, no controller, no CRD, no second apply.
-#
-# Keys required by Helm templates:
-#   core-service:     DATABASE_PASSWORD, JWT_SECRET, ADMIN_PASSWORD
-#   ai-service:       DATABASE_PASSWORD
-#   document-service: DATABASE_PASSWORD, JWT_SECRET
-#
-# Source mapping (from modules/database/main.tf secret JSON structure):
+# Created directly by Terraform using values from AWS Secrets Manager.
+# No External Secrets Operator (avoids CRD bootstrap / two-apply problem).
+# Secret JSON key names from modules/database/main.tf:
 #   cargotrack-database-secret-v2    → { "password": ..., "username": ..., "dbname": ... }
 #   cargotrack-application-secret-v2 → { "jwt_secret": ..., "admin_password": ..., "admin_email": ... }
 
@@ -299,16 +228,12 @@ resource "kubernetes_secret" "cargotrack_secrets" {
 
   type = "Opaque"
 
-  # Values sourced from the data sources declared at the top of this file.
-  # jsondecode() parses the Secrets Manager JSON blob into a map, then we
-  # extract the exact key that each service expects.
   data = {
     DATABASE_PASSWORD = jsondecode(data.aws_secretsmanager_secret_version.database.secret_string)["password"]
     JWT_SECRET        = jsondecode(data.aws_secretsmanager_secret_version.application.secret_string)["jwt_secret"]
     ADMIN_PASSWORD    = jsondecode(data.aws_secretsmanager_secret_version.application.secret_string)["admin_password"]
   }
 
-  # Force recreation if the secret values change (e.g. rotation)
   lifecycle {
     ignore_changes = []
   }
@@ -321,34 +246,12 @@ resource "kubernetes_secret" "cargotrack_secrets" {
 }
 
 # ── ArgoCD ────────────────────────────────────────────────────────────────────
-# Installed after LBC — ArgoCD server is exposed via an NLB created by LBC.
+# Installed after LBC — ArgoCD server NLB is created by the LBC.
 #
-# Bootstrap strategy:
-#   The root Application CR (app-of-apps pattern) is injected directly into the
-#   ArgoCD Helm release via server.additionalApplications Helm values. This means
-#   ArgoCD installs its own CRDs and then creates the Application resource as part
-#   of the same Helm install — no separate kubernetes_manifest needed for bootstrap.
-#
-# Why not a separate kubernetes_manifest for the root app?
-#   kubernetes_manifest validates CRD schemas at PLAN time. Even with depends_on,
-#   the plan-time validation of argoproj.io/v1alpha1/Application fails on a fresh
-#   cluster because the CRDs aren't installed yet. Using Helm values to inject the
-#   Application CR avoids this entirely — ArgoCD's own Helm chart creates it.
-#
-# Service configuration:
-#   server.service.type = LoadBalancer
-#     → Triggers the AWS LBC (already installed above) to create an NLB.
-#
-#   aws-load-balancer-scheme: internet-facing
-#     → Forces an internet-facing NLB in public subnets.
-#
-#   aws-load-balancer-type: external
-#     → Ensures the NLB is provisioned via the AWS LBC (not legacy controller).
-#
-# Destroy safety:
-#   ArgoCD's cascade delete finalizer (resources-finalizer.argocd.argoproj.io)
-#   on the root Application causes ArgoCD to delete all managed K8s resources
-#   (Ingress → ALB removed) before this Helm release is uninstalled.
+# The root Application CR is created by a SEPARATE kubernetes_manifest resource
+# below. This gives Terraform explicit lifecycle control and avoids the
+# server.additionalApplications Helm pattern (which has its own timeout problem
+# when the Application CR has a finalizer and Helm tries to upgrade/uninstall).
 
 resource "helm_release" "argocd" {
   name       = "argocd"
@@ -361,97 +264,26 @@ resource "helm_release" "argocd" {
   timeout         = 600 # 10 minutes — ArgoCD has many components
   cleanup_on_fail = true
 
-  # Expose ArgoCD server via a LoadBalancer
+  # Expose ArgoCD server via an internet-facing NLB
   set {
     name  = "server.service.type"
     value = "LoadBalancer"
   }
 
-  # Force internet-facing NLB via AWS Load Balancer Controller
   set {
     name  = "server.service.annotations.service\\.beta\\.kubernetes\\.io/aws-load-balancer-scheme"
     value = "internet-facing"
   }
 
-  # Ensure the NLB is created via the AWS LBC (not the legacy cloud controller)
   set {
     name  = "server.service.annotations.service\\.beta\\.kubernetes\\.io/aws-load-balancer-type"
     value = "external"
   }
 
-  # Disable TLS on the ArgoCD server — TLS is terminated at the NLB/CloudFront layer
+  # TLS terminated at NLB/CloudFront — run ArgoCD server in insecure mode
   set {
     name  = "server.extraArgs[0]"
     value = "--insecure"
-  }
-
-  # ── App-of-Apps bootstrap via Helm values ─────────────────────────────────
-  # Injects the root Application CR directly into the ArgoCD Helm install.
-  # This avoids the kubernetes_manifest CRD bootstrap problem on fresh clusters.
-  # ArgoCD creates this Application as part of its own Helm chart — the CRDs
-  # are always available because Helm installs them in the same operation.
-  #
-  # Note: ArgoCD chart v7.x uses server.additionalApplications for this.
-  # The finalizer ensures cascade-delete on destroy (Ingress → ALB cleanup).
-
-  set {
-    name  = "server.additionalApplications[0].name"
-    value = "root-app"
-  }
-
-  set {
-    name  = "server.additionalApplications[0].namespace"
-    value = "argocd"
-  }
-
-  set {
-    name  = "server.additionalApplications[0].project"
-    value = "default"
-  }
-
-  set {
-    name  = "server.additionalApplications[0].source.repoURL"
-    value = "https://github.com/AbhinavBabu/CargoTrack-Logistics.git"
-  }
-
-  set {
-    name  = "server.additionalApplications[0].source.targetRevision"
-    value = "cargotrack-terraform-v2"
-  }
-
-  set {
-    name  = "server.additionalApplications[0].source.path"
-    value = "gitops/apps"
-  }
-
-  set {
-    name  = "server.additionalApplications[0].destination.server"
-    value = "https://kubernetes.default.svc"
-  }
-
-  set {
-    name  = "server.additionalApplications[0].destination.namespace"
-    value = "argocd"
-  }
-
-  set {
-    name  = "server.additionalApplications[0].syncPolicy.automated.prune"
-    value = "true"
-  }
-
-  set {
-    name  = "server.additionalApplications[0].syncPolicy.automated.selfHeal"
-    value = "true"
-  }
-
-  set {
-    name  = "server.additionalApplications[0].syncPolicy.syncOptions[0]"
-    value = "CreateNamespace=true"
-  }
-
-  set {
-    name  = "server.additionalApplications[0].finalizers[0]"
-    value = "resources-finalizer.argocd.argoproj.io"
   }
 
   depends_on = [
@@ -461,5 +293,168 @@ resource "helm_release" "argocd" {
     helm_release.aws_load_balancer_controller,
     helm_release.cluster_autoscaler,
     helm_release.metrics_server,
+  ]
+}
+
+# ── Pre-destroy ingress cleanup ───────────────────────────────────────────────
+# PURPOSE: Ensure the ALB is deprovisioned before the LBC is uninstalled.
+#
+# WHY NEEDED:
+#   The root Application CR (below) has NO cascade-delete finalizer.
+#   Without the finalizer, deleting the Application CR does NOT trigger ArgoCD
+#   to garbage-collect its child resources (Deployment, Service, Ingress, etc.).
+#   If the Ingress remains when the LBC is uninstalled, the ALB is orphaned.
+#
+#   The finalizer was deliberately removed because:
+#   - Terraform's kubernetes_manifest has NO configurable delete timeout
+#   - A full CargoTrack deploy has 20+ managed objects → cascade delete takes
+#     5-10 min → Terraform times out every time
+#
+# WHAT IT DOES ON DESTROY (local-exec, automated by Terraform — not manual):
+#   1. Configures kubectl using aws eks update-kubeconfig
+#   2. Deletes all Ingress resources in the cargotrack namespace
+#   3. Waits 30 s for the LBC to finish deprovisioning the ALB
+#   The LBC is still running at this point (see destroy sequence below).
+#
+# DESTROY SEQUENCE (enforced by depends_on graph):
+#
+#   kubernetes_manifest.argocd_root_app  ← destroyed FIRST (depends on this null_resource)
+#         ↓
+#   null_resource.pre_destroy_ingress_cleanup  ← local-exec deletes Ingress
+#         ↓                                      LBC still alive → ALB removed ✅
+#   helm_release.argocd                  ← ArgoCD uninstalled
+#         ↓
+#   [cargotrack_secrets, autoscaler, metrics]
+#         ↓
+#   helm_release.aws_load_balancer_controller  ← LBC uninstalled (ALB already gone)
+#         ↓
+#   kubernetes_namespace.*               ← Namespaces deleted (already empty)
+#
+# APPLY: The local-exec provisioner is tagged `when = destroy` — it does NOT
+# run on apply. The triggers block is set from module outputs so this resource
+# is re-created (and the new triggers stored) whenever the cluster changes.
+
+resource "null_resource" "pre_destroy_ingress_cleanup" {
+  triggers = {
+    cluster_name = module.eks.cluster_name
+    aws_region   = var.aws_region
+    namespace    = "cargotrack"
+  }
+
+  provisioner "local-exec" {
+    when        = destroy
+    interpreter = ["bash", "-c"]
+    command     = <<-EOT
+      set -e
+      echo "[pre-destroy] Configuring kubectl for ${self.triggers.cluster_name}..."
+      aws eks update-kubeconfig \
+        --name "${self.triggers.cluster_name}" \
+        --region "${self.triggers.aws_region}" \
+        --kubeconfig "/tmp/cargotrack-kube-destroy.conf" 2>/dev/null
+
+      echo "[pre-destroy] Deleting Ingress resources in ${self.triggers.namespace}..."
+      KUBECONFIG="/tmp/cargotrack-kube-destroy.conf" \
+        kubectl delete ingress --all \
+          -n "${self.triggers.namespace}" \
+          --timeout=120s \
+          --ignore-not-found=true 2>/dev/null || true
+
+      echo "[pre-destroy] Waiting 30s for ALB deprovisioning..."
+      sleep 30
+
+      echo "[pre-destroy] Ingress cleanup complete."
+    EOT
+  }
+
+  # Must be destroyed AFTER helm_release.argocd so ArgoCD is still running
+  # during the local-exec (ArgoCD is not needed for the cleanup itself, but
+  # the LBC is — and LBC is destroyed after ArgoCD in the graph).
+  depends_on = [
+    helm_release.argocd,
+  ]
+}
+
+# ── ArgoCD App-of-Apps Bootstrap ─────────────────────────────────────────────
+# Creates the root Application CR (app-of-apps pattern) that points ArgoCD
+# at gitops/apps/ on the cargotrack-terraform-v2 branch.
+#
+# DESIGN DECISIONS:
+#
+# 1. kubernetes_manifest (not server.additionalApplications):
+#    A separate resource gives Terraform explicit lifecycle control.
+#    field_manager { force_conflicts = true } resolves field-ownership
+#    conflicts with argocd-controller without requiring manual patching.
+#
+# 2. NO cascade-delete finalizer (resources-finalizer.argocd.argoproj.io):
+#    The finalizer causes kubernetes_manifest deletion to block until ArgoCD
+#    cascade-deletes every child resource. Terraform has no configurable
+#    delete timeout for kubernetes_manifest → always times out.
+#    ALB cleanup is handled by null_resource.pre_destroy_ingress_cleanup.
+#
+# 3. No CRD bootstrap issue:
+#    depends_on = [helm_release.argocd] ensures the Helm chart (which
+#    installs the argoproj.io CRDs with wait=true) runs BEFORE this manifest.
+#    Terraform applies resources in dependency order — CRDs exist by the time
+#    this manifest is applied.
+#
+# 4. Migration safety:
+#    If this resource exists in state WITH the old cascade-delete finalizer,
+#    Terraform will UPDATE (patch) the Application CR to remove the finalizer.
+#    This patch is instant — no deletion, no timeout, no manual intervention.
+#    The Application continues running; ArgoCD continues syncing.
+#
+# 5. Destroy sequence guarantee:
+#    kubernetes_manifest.argocd_root_app depends on null_resource.pre_destroy_ingress_cleanup.
+#    On destroy, Terraform reverses the graph:
+#      argocd_root_app is destroyed FIRST (instant, no finalizer)
+#      null_resource cleanup runs SECOND (deletes Ingress, ALB removed)
+#      argocd is destroyed THIRD
+#      LBC is destroyed LAST (ALB already gone) ✅
+
+resource "kubernetes_manifest" "argocd_root_app" {
+  manifest = {
+    apiVersion = "argoproj.io/v1alpha1"
+    kind       = "Application"
+    metadata = {
+      name      = "root-app"
+      namespace = "argocd"
+      # NO finalizer — ALB cleanup is handled by null_resource.pre_destroy_ingress_cleanup.
+      # Removing the finalizer makes this deletion instant, preventing destroy timeouts.
+      finalizers = []
+    }
+    spec = {
+      project = "default"
+      source = {
+        repoURL        = "https://github.com/AbhinavBabu/CargoTrack-Logistics.git"
+        targetRevision = "cargotrack-terraform-v2"
+        path           = "gitops/apps"
+      }
+      destination = {
+        server    = "https://kubernetes.default.svc"
+        namespace = "argocd"
+      }
+      syncPolicy = {
+        automated = {
+          prune    = true
+          selfHeal = true
+        }
+        syncOptions = [
+          "CreateNamespace=true",
+        ]
+      }
+    }
+  }
+
+  field_manager {
+    force_conflicts = true
+  }
+
+  depends_on = [
+    helm_release.argocd,
+    kubernetes_namespace.argocd,
+    # This dependency ensures that on DESTROY, the null_resource is destroyed
+    # BEFORE this Application CR is deleted (Terraform reverses the graph).
+    # Destroy order: argocd_root_app → null_resource (cleanup) → argocd → LBC
+    null_resource.pre_destroy_ingress_cleanup,
   ]
 }

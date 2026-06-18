@@ -36,5 +36,11 @@ terraform {
       source  = "hashicorp/kubernetes"
       version = "~> 2.31"
     }
+
+    # Null provider — used for pre-destroy cleanup hooks (local-exec provisioners)
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.2"
+    }
   }
 }
