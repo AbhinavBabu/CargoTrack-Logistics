@@ -97,13 +97,19 @@ module "monitoring" {
   project_name = var.project_name
   aws_region   = var.aws_region
 
-  # EC2/ASG references removed \u2014 module will skip those alarms
-  # backend_asg_name        = (not set \u2014 defaults to "")
-  # external_alb_arn_suffix = (not set \u2014 defaults to "")
+  # EC2/ASG references removed — module will skip those alarms
+  # backend_asg_name        = (not set — defaults to "")
+  # external_alb_arn_suffix = (not set — defaults to "")
 
   db_identifier = module.database.db_identifier
   alarm_email   = var.alarm_email
   kms_key_arn   = module.database.kms_key_arn
+
+  # EKS Container Insights alarms — enabled now that EKS is the compute platform
+  eks_cluster_name = module.eks.cluster_name
+
+  # SQS compliance queue depth alarm — reuses existing queue name from eventing module
+  compliance_queue_name = module.eventing.compliance_queue_name
 }
 
 # ── VPC ENDPOINTS ────────────────────────────────────────────────────────────

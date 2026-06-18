@@ -24,6 +24,17 @@ terraform {
       source  = "hashicorp/tls"
       version = "~> 4.0"
     }
+
+    # Helm provider — installs ALB Controller, Metrics Server, Cluster Autoscaler, ArgoCD
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 2.14"
+    }
+
+    # Kubernetes provider — manages namespaces and namespace-scoped resources
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 2.31"
+    }
   }
 }
-

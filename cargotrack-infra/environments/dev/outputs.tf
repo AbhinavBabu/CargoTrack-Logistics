@@ -140,3 +140,40 @@ output "dns_enabled" {
   description = "True when a domain was provided and DNS resources were created"
   value       = module.dns.dns_enabled
 }
+
+# ── Kubernetes platform outputs ───────────────────────────────────────────────
+
+output "argocd_namespace" {
+  description = "Namespace where ArgoCD is installed"
+  value       = kubernetes_namespace.argocd.metadata[0].name
+}
+
+output "cargotrack_namespace" {
+  description = "Namespace where CargoTrack application pods run"
+  value       = kubernetes_namespace.cargotrack.metadata[0].name
+}
+
+output "platform_note" {
+  description = "Post-apply steps required to complete GitOps bootstrap"
+  value       = <<-EOT
+    ── Post-apply steps ──────────────────────────────────────────────────────
+    1. Get ArgoCD initial admin password:
+         kubectl -n argocd get secret argocd-initial-admin-secret \
+           -o jsonpath="{.data.password}" | base64 -d
+
+    2. Get ArgoCD server URL (LoadBalancer):
+         kubectl get svc argocd-server -n argocd \
+           -o jsonpath="{.status.loadBalancer.ingress[0].hostname}"
+
+    3. Apply ArgoCD App-of-Apps (GitOps bootstrap):
+         kubectl apply -f gitops/apps/root-app.yaml
+
+    4. Once ArgoCD syncs and the Ingress is created, get the ALB DNS name:
+         kubectl get ingress -n cargotrack
+
+    5. Wire CloudFront to the ALB:
+         terraform apply -var="eks_ingress_alb_dns=<ALB_DNS>"
+    ─────────────────────────────────────────────────────────────────────────
+  EOT
+}
+
