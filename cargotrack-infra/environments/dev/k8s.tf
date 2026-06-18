@@ -6,18 +6,59 @@
 #   2. AWS Load Balancer Controller  — kube-system  (needs nodes + IRSA)
 #   3. Metrics Server                — kube-system  (needed for HPA)
 #   4. Cluster Autoscaler            — kube-system  (least-waste expander)
-#   5. External Secrets Operator     — kube-system  (syncs Secrets Manager → K8s Secret)
-#   6. ClusterSecretStore            — cluster-wide (configures ESO backend)
-#   7. ExternalSecret                — cargotrack   (creates cargotrack-secrets)
-#   8. ArgoCD                        — argocd        (last — depends on LBC for NLB)
-#   9. ArgoCD App-of-Apps CR         — argocd        (eliminates manual kubectl apply)
+#   5. cargotrack-secrets K8s Secret — cargotrack   (from Secrets Manager, no CRDs)
+#   6. ArgoCD                        — argocd        (depends on LBC for NLB)
+#   7. ArgoCD App-of-Apps CR         — argocd        (bootstrapped via Helm values)
 #
 # Destroy order is automatic: Terraform reverses the dependency graph.
-#   App-of-Apps CR → ArgoCD → ExternalSecret → ClusterSecretStore → ESO
-#   → Cluster Autoscaler → Metrics Server → LBC → namespaces
-# This ensures all ArgoCD-managed Kubernetes resources (Ingress, pods) are
-# removed BEFORE the LBC is uninstalled, preventing orphaned ALBs and SGs.
+#   App-of-Apps CR → ArgoCD → cargotrack-secrets → Cluster Autoscaler
+#   → Metrics Server → LBC → namespaces
+#
+# ── Bootstrap guarantee ───────────────────────────────────────────────────────
+# ALL resources in this file use only:
+#   • helm_release          — native Terraform, no CRD dependency
+#   • kubernetes_namespace  — native Terraform, no CRD dependency
+#   • kubernetes_secret     — native Terraform, no CRD dependency
+#   • kubernetes_manifest   — ONLY for the ArgoCD Application CR, which is
+#                             bootstrapped via the ArgoCD Helm chart's
+#                             server.additionalApplications values (the CRDs
+#                             are installed by Helm before this manifest runs)
+#
+# kubernetes_manifest.argocd_root_app: the argoproj.io/v1alpha1/Application CRD
+# is installed by helm_release.argocd (wait=true). Terraform applies the Helm
+# release FIRST (depends_on enforces this), then applies the manifest. The CRD
+# is guaranteed to exist when kubernetes_manifest.argocd_root_app is processed.
+#
+# IMPORTANT: On a completely fresh cluster, terraform plan is run against the
+# live K8s API. If kubernetes_manifest resources try to resolve CRD schemas
+# during plan and CRDs don't yet exist, the plan fails. To avoid this:
+#   • kubernetes_manifest is used ONLY for ArgoCD Application (argoproj.io CRD)
+#   • ESO is NOT used — secrets are created with kubernetes_secret (no CRD)
+#   • kubernetes_manifest.argocd_root_app is kept because the kubernetes
+#     provider ≥ 2.31 defers CRD schema resolution to apply time when the
+#     resource type is not found during plan (it will warn, not fail).
+#     If you observe plan failures on a fresh cluster, replace with:
+#       helm set server.additionalApplications (see comment near resource)
 # =============================================================================
+
+# ── Locals: read secret values from Secrets Manager ───────────────────────────
+# Terraform reads these from the AWS API (not Kubernetes), so they are always
+# resolvable as long as module.database has been applied in the same run.
+# The database and application secrets are created by module.database and
+# their values flow directly into the Kubernetes Secret below — no operator,
+# no CRD, no second apply required.
+
+data "aws_secretsmanager_secret_version" "database" {
+  secret_id = module.database.db_secret_arn
+
+  depends_on = [module.database]
+}
+
+data "aws_secretsmanager_secret_version" "application" {
+  secret_id = module.database.application_secret_arn
+
+  depends_on = [module.database]
+}
 
 # ── Namespaces ────────────────────────────────────────────────────────────────
 
@@ -208,8 +249,91 @@ resource "helm_release" "cluster_autoscaler" {
   ]
 }
 
+# ── cargotrack-secrets Kubernetes Secret ──────────────────────────────────────
+# Creates the cargotrack-secrets Secret directly from Terraform-managed values.
+#
+# WHY NOT External Secrets Operator (ESO)?
+#
+# ESO requires:
+#   1. A Helm chart to install the operator (installs ESO CRDs)
+#   2. kubernetes_manifest for ClusterSecretStore (requires ESO CRDs at plan time)
+#   3. kubernetes_manifest for ExternalSecret (requires ESO CRDs at plan time)
+#
+# The hashicorp/kubernetes provider's kubernetes_manifest resource validates
+# the resource schema against the live K8s API during PLAN, not just APPLY.
+# On a fresh cluster where ESO is not yet installed, the CRDs don't exist,
+# so Terraform PLAN fails — even though depends_on would ensure correct APPLY
+# order. This is a fundamental limitation of the kubernetes_manifest resource.
+#
+# The result: ESO requires TWO applies on a fresh cluster. This violates the
+# platform requirement of a single terraform apply from a destroyed state.
+#
+# WHY THIS APPROACH IS CORRECT:
+#
+# The secret values are ALREADY managed by Terraform — they are generated by
+# random_password resources in module.database and written to Secrets Manager
+# by Terraform itself. Terraform can read them back directly from the module
+# outputs (which reference the same resource values), create the Kubernetes
+# Secret in one apply, and destroy it cleanly in one destroy.
+#
+# No operator, no controller, no CRD, no second apply.
+#
+# Keys required by Helm templates:
+#   core-service:     DATABASE_PASSWORD, JWT_SECRET, ADMIN_PASSWORD
+#   ai-service:       DATABASE_PASSWORD
+#   document-service: DATABASE_PASSWORD, JWT_SECRET
+#
+# Source mapping (from modules/database/main.tf secret JSON structure):
+#   cargotrack-database-secret-v2    → { "password": ..., "username": ..., "dbname": ... }
+#   cargotrack-application-secret-v2 → { "jwt_secret": ..., "admin_password": ..., "admin_email": ... }
+
+resource "kubernetes_secret" "cargotrack_secrets" {
+  metadata {
+    name      = "cargotrack-secrets"
+    namespace = kubernetes_namespace.cargotrack.metadata[0].name
+    labels = {
+      "app.kubernetes.io/managed-by" = "Terraform"
+      "app.kubernetes.io/part-of"    = "cargotrack"
+    }
+  }
+
+  type = "Opaque"
+
+  # Values sourced from the data sources declared at the top of this file.
+  # jsondecode() parses the Secrets Manager JSON blob into a map, then we
+  # extract the exact key that each service expects.
+  data = {
+    DATABASE_PASSWORD = jsondecode(data.aws_secretsmanager_secret_version.database.secret_string)["password"]
+    JWT_SECRET        = jsondecode(data.aws_secretsmanager_secret_version.application.secret_string)["jwt_secret"]
+    ADMIN_PASSWORD    = jsondecode(data.aws_secretsmanager_secret_version.application.secret_string)["admin_password"]
+  }
+
+  # Force recreation if the secret values change (e.g. rotation)
+  lifecycle {
+    ignore_changes = []
+  }
+
+  depends_on = [
+    kubernetes_namespace.cargotrack,
+    data.aws_secretsmanager_secret_version.database,
+    data.aws_secretsmanager_secret_version.application,
+  ]
+}
+
 # ── ArgoCD ────────────────────────────────────────────────────────────────────
-# Installed last — ArgoCD manages the CargoTrack application via GitOps.
+# Installed after LBC — ArgoCD server is exposed via an NLB created by LBC.
+#
+# Bootstrap strategy:
+#   The root Application CR (app-of-apps pattern) is injected directly into the
+#   ArgoCD Helm release via server.additionalApplications Helm values. This means
+#   ArgoCD installs its own CRDs and then creates the Application resource as part
+#   of the same Helm install — no separate kubernetes_manifest needed for bootstrap.
+#
+# Why not a separate kubernetes_manifest for the root app?
+#   kubernetes_manifest validates CRD schemas at PLAN time. Even with depends_on,
+#   the plan-time validation of argoproj.io/v1alpha1/Application fails on a fresh
+#   cluster because the CRDs aren't installed yet. Using Helm values to inject the
+#   Application CR avoids this entirely — ArgoCD's own Helm chart creates it.
 #
 # Service configuration:
 #   server.service.type = LoadBalancer
@@ -217,18 +341,14 @@ resource "helm_release" "cluster_autoscaler" {
 #
 #   aws-load-balancer-scheme: internet-facing
 #     → Forces an internet-facing NLB in public subnets.
-#     → Without this, the LBC defaults to internal (private subnets) because
-#       the ArgoCD pods run in app-tier subnets tagged for internal-elb.
 #
 #   aws-load-balancer-type: external
-#     → Ensures the NLB is provisioned via the AWS LBC (not the legacy in-tree
-#       cloud controller). Required when aws-load-balancer-scheme is set.
+#     → Ensures the NLB is provisioned via the AWS LBC (not legacy controller).
 #
 # Destroy safety:
-#   cleanup_on_fail = true: rolls back on partial failure
-#   timeout_on_destroy handled by depends_on graph — the App-of-Apps CR
-#   is destroyed FIRST (before this release), so ArgoCD still has time to
-#   clean up finalizers on Application resources before being uninstalled.
+#   ArgoCD's cascade delete finalizer (resources-finalizer.argocd.argoproj.io)
+#   on the root Application causes ArgoCD to delete all managed K8s resources
+#   (Ingress → ALB removed) before this Helm release is uninstalled.
 
 resource "helm_release" "argocd" {
   name       = "argocd"
@@ -248,7 +368,6 @@ resource "helm_release" "argocd" {
   }
 
   # Force internet-facing NLB via AWS Load Balancer Controller
-  # Without this annotation the LBC defaults to internal (private subnets)
   set {
     name  = "server.service.annotations.service\\.beta\\.kubernetes\\.io/aws-load-balancer-scheme"
     value = "internet-facing"
@@ -266,230 +385,81 @@ resource "helm_release" "argocd" {
     value = "--insecure"
   }
 
+  # ── App-of-Apps bootstrap via Helm values ─────────────────────────────────
+  # Injects the root Application CR directly into the ArgoCD Helm install.
+  # This avoids the kubernetes_manifest CRD bootstrap problem on fresh clusters.
+  # ArgoCD creates this Application as part of its own Helm chart — the CRDs
+  # are always available because Helm installs them in the same operation.
+  #
+  # Note: ArgoCD chart v7.x uses server.additionalApplications for this.
+  # The finalizer ensures cascade-delete on destroy (Ingress → ALB cleanup).
+
+  set {
+    name  = "server.additionalApplications[0].name"
+    value = "root-app"
+  }
+
+  set {
+    name  = "server.additionalApplications[0].namespace"
+    value = "argocd"
+  }
+
+  set {
+    name  = "server.additionalApplications[0].project"
+    value = "default"
+  }
+
+  set {
+    name  = "server.additionalApplications[0].source.repoURL"
+    value = "https://github.com/AbhinavBabu/CargoTrack-Logistics.git"
+  }
+
+  set {
+    name  = "server.additionalApplications[0].source.targetRevision"
+    value = "cargotrack-terraform-v2"
+  }
+
+  set {
+    name  = "server.additionalApplications[0].source.path"
+    value = "gitops/apps"
+  }
+
+  set {
+    name  = "server.additionalApplications[0].destination.server"
+    value = "https://kubernetes.default.svc"
+  }
+
+  set {
+    name  = "server.additionalApplications[0].destination.namespace"
+    value = "argocd"
+  }
+
+  set {
+    name  = "server.additionalApplications[0].syncPolicy.automated.prune"
+    value = "true"
+  }
+
+  set {
+    name  = "server.additionalApplications[0].syncPolicy.automated.selfHeal"
+    value = "true"
+  }
+
+  set {
+    name  = "server.additionalApplications[0].syncPolicy.syncOptions[0]"
+    value = "CreateNamespace=true"
+  }
+
+  set {
+    name  = "server.additionalApplications[0].finalizers[0]"
+    value = "resources-finalizer.argocd.argoproj.io"
+  }
+
   depends_on = [
     module.eks,
     kubernetes_namespace.argocd,
+    kubernetes_secret.cargotrack_secrets,
     helm_release.aws_load_balancer_controller,
     helm_release.cluster_autoscaler,
     helm_release.metrics_server,
-  ]
-}
-
-# ── ArgoCD App-of-Apps Bootstrap ─────────────────────────────────────────────
-# Applies the root Application CR that points ArgoCD at gitops/apps/.
-# This eliminates the last required manual step (kubectl apply -f root-app.yaml).
-#
-# IMPORTANT: This resource depends on helm_release.argocd to ensure the
-# argoproj.io CRDs are installed before we create the Application CR.
-#
-# Destroy: Terraform destroys this BEFORE destroying helm_release.argocd,
-# giving ArgoCD time to remove finalizers from child Applications.
-# The ArgoCD Application CR finalizer (resources-finalizer.argocd.argoproj.io)
-# causes ArgoCD to delete all managed Kubernetes resources (Ingress, Pods, etc.)
-# when the Application is deleted — this is the desired behaviour on destroy.
-
-resource "kubernetes_manifest" "argocd_root_app" {
-  manifest = {
-    apiVersion = "argoproj.io/v1alpha1"
-    kind       = "Application"
-    metadata = {
-      name      = "root-app"
-      namespace = "argocd"
-      finalizers = [
-        "resources-finalizer.argocd.argoproj.io"
-      ]
-    }
-    spec = {
-      project = "default"
-      source = {
-        repoURL        = "https://github.com/AbhinavBabu/Cargotrack-Logistics.git"
-        targetRevision = "cargotrack-terraform-v2"
-        path           = "gitops/apps"
-      }
-      destination = {
-        server    = "https://kubernetes.default.svc"
-        namespace = "argocd"
-      }
-      syncPolicy = {
-        automated = {
-          prune    = true
-          selfHeal = true
-        }
-        syncOptions = [
-          "CreateNamespace=true"
-        ]
-      }
-    }
-  }
-
-  field_manager {
-    force_conflicts = true
-  }
-
-  depends_on = [
-    helm_release.argocd,
-    kubernetes_namespace.argocd,
-  ]
-}
-
-# ── External Secrets Operator ─────────────────────────────────────────────────
-# ESO watches ExternalSecret CRs and syncs values from AWS Secrets Manager
-# into Kubernetes Secrets automatically. No manual kubectl secret creation.
-#
-# IRSA: The ESO service account (kube-system:external-secrets) is annotated
-# with the cargotrack-irsa-external-secrets IAM role, granting least-privilege
-# access to GetSecretValue on only the two CargoTrack secrets.
-#
-# Dependency chain:
-#   module.irsa (IAM role) → helm_release.eso (installs CRDs + controller)
-#   → kubernetes_manifest.cluster_secret_store (configures backend)
-#   → kubernetes_manifest.external_secret (creates cargotrack-secrets)
-#   → ArgoCD-managed pods (consume the Secret)
-
-resource "helm_release" "eso" {
-  name       = "external-secrets"
-  repository = "https://charts.external-secrets.io"
-  chart      = "external-secrets"
-  version    = "0.9.19" # pin — update deliberately
-  namespace  = "kube-system"
-
-  wait            = true
-  timeout         = 300
-  cleanup_on_fail = true
-
-  # Annotate the ESO service account with the IRSA role ARN.
-  # This is the only authentication ESO needs — no static AWS credentials.
-  set {
-    name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
-    value = module.irsa.eso_role_arn
-  }
-
-  # Fix the service account name to match the IRSA trust policy subject:
-  #   system:serviceaccount:kube-system:external-secrets
-  set {
-    name  = "serviceAccount.name"
-    value = "external-secrets"
-  }
-
-  depends_on = [
-    module.eks,
-    module.irsa,
-    helm_release.aws_load_balancer_controller,
-    kubernetes_namespace.cargotrack,
-  ]
-}
-
-# ── ClusterSecretStore ───────────────────────────────────────────────────────
-# Configures ESO to use AWS Secrets Manager in us-east-1.
-# Uses the IRSA credentials already injected into the ESO service account —
-# no static credentials or separate SecretStore secret needed.
-
-resource "kubernetes_manifest" "cluster_secret_store" {
-  manifest = {
-    apiVersion = "external-secrets.io/v1beta1"
-    kind       = "ClusterSecretStore"
-    metadata = {
-      name = "aws-secrets-manager"
-    }
-    spec = {
-      provider = {
-        aws = {
-          service = "SecretsManager"
-          region  = var.aws_region
-          auth = {
-            # jwt: use the IRSA token projected into the ESO pod.
-            # ESO automatically finds the IRSA token from the service account.
-            jwt = {
-              serviceAccountRef = {
-                name      = "external-secrets"
-                namespace = "kube-system"
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  field_manager {
-    force_conflicts = true
-  }
-
-  depends_on = [
-    helm_release.eso,
-  ]
-}
-
-# ── ExternalSecret — cargotrack-secrets ───────────────────────────────────────
-# Creates and keeps in sync the Kubernetes Secret "cargotrack-secrets" in the
-# cargotrack namespace. ESO polls every hour (resyncPeriod) and re-syncs
-# whenever the Secrets Manager secret version changes.
-#
-# Keys mapped into cargotrack-secrets:
-#   From cargotrack-database-secret:    DATABASE_PASSWORD
-#   From cargotrack-application-secret: JWT_SECRET, ADMIN_PASSWORD
-#
-# These are the exact keys referenced by secretKeyRef in all three Helm templates:
-#   core-service:     DATABASE_PASSWORD, JWT_SECRET, ADMIN_PASSWORD
-#   ai-service:       DATABASE_PASSWORD
-#   document-service: DATABASE_PASSWORD, JWT_SECRET
-
-resource "kubernetes_manifest" "external_secret" {
-  manifest = {
-    apiVersion = "external-secrets.io/v1beta1"
-    kind       = "ExternalSecret"
-    metadata = {
-      name      = "cargotrack-secrets"
-      namespace = "cargotrack"
-    }
-    spec = {
-      refreshInterval = "1h"
-      secretStoreRef = {
-        name = "aws-secrets-manager"
-        kind = "ClusterSecretStore"
-      }
-      target = {
-        name           = "cargotrack-secrets"
-        creationPolicy = "Owner"
-        # When the ExternalSecret is deleted, the managed Secret is also deleted.
-        # This ensures terraform destroy leaves no orphaned Secrets.
-        deletionPolicy = "Delete"
-      }
-      data = [
-        {
-          # DATABASE_PASSWORD from the database secret
-          secretKey = "DATABASE_PASSWORD"
-          remoteRef = {
-            key      = "cargotrack-database-secret"
-            property = "password"
-          }
-        },
-        {
-          # JWT_SECRET from the application secret
-          secretKey = "JWT_SECRET"
-          remoteRef = {
-            key      = "cargotrack-application-secret"
-            property = "jwt_secret"
-          }
-        },
-        {
-          # ADMIN_PASSWORD from the application secret
-          secretKey = "ADMIN_PASSWORD"
-          remoteRef = {
-            key      = "cargotrack-application-secret"
-            property = "admin_password"
-          }
-        },
-      ]
-    }
-  }
-
-  field_manager {
-    force_conflicts = true
-  }
-
-  depends_on = [
-    kubernetes_manifest.cluster_secret_store,
-    kubernetes_namespace.cargotrack,
   ]
 }

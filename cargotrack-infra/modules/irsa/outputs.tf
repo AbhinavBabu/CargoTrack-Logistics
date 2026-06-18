@@ -22,8 +22,3 @@ output "cluster_autoscaler_role_arn" {
   description = "IAM role ARN for the Cluster Autoscaler service account (kube-system:cluster-autoscaler)"
   value       = aws_iam_role.cluster_autoscaler.arn
 }
-
-output "eso_role_arn" {
-  description = "IAM role ARN for the External Secrets Operator service account (kube-system:external-secrets)"
-  value       = aws_iam_role.eso.arn
-}
