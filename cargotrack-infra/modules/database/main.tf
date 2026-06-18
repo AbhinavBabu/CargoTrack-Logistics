@@ -151,6 +151,8 @@ resource "aws_db_instance" "database" {
 
   skip_final_snapshot = true
 
+  auto_minor_version_upgrade = true
+
   db_subnet_group_name = aws_db_subnet_group.database.name
 
   vpc_security_group_ids = [

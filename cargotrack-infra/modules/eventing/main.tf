@@ -254,7 +254,7 @@ resource "aws_sqs_queue" "compliance_dlq" {
 resource "aws_sqs_queue" "compliance" {
 
   name                       = "${var.project_name}-compliance-trigger"
-  visibility_timeout_seconds = 300 # 5 minutes — matches ai-service consumer timeout
+  visibility_timeout_seconds = 300   # 5 minutes — matches ai-service consumer timeout
   message_retention_seconds  = 86400 # 24 hours
 
   kms_master_key_id = var.kms_key_arn
@@ -346,8 +346,8 @@ data "aws_iam_policy_document" "ai_service_sqs" {
   }
 
   statement {
-    sid     = "ComplianceSQSPublish"
-    actions = ["sqs:SendMessage"]
+    sid       = "ComplianceSQSPublish"
+    actions   = ["sqs:SendMessage"]
     resources = [aws_sqs_queue.compliance.arn]
     # core-service publishes to this queue when SQS_COMPLIANCE_QUEUE_URL is set
   }

@@ -18,7 +18,7 @@ locals {
     core_service     = "core-service"
     document_service = "document-service"
     ai_service       = "ai-service"
-    alb_controller   = "aws-load-balancer-controller"  # installed in kube-system
+    alb_controller   = "aws-load-balancer-controller" # installed in kube-system
   }
 }
 
@@ -152,29 +152,29 @@ data "aws_iam_policy_document" "core_service" {
 
   # EventBridge: publish shipment lifecycle events
   statement {
-    sid     = "EventBridgePublish"
-    actions = ["events:PutEvents"]
+    sid       = "EventBridgePublish"
+    actions   = ["events:PutEvents"]
     resources = [var.event_bus_arn]
   }
 
   # SQS: publish compliance trigger messages to compliance queue
   statement {
-    sid     = "SQSCompliancePublish"
-    actions = ["sqs:SendMessage", "sqs:GetQueueAttributes"]
+    sid       = "SQSCompliancePublish"
+    actions   = ["sqs:SendMessage", "sqs:GetQueueAttributes"]
     resources = [var.compliance_queue_arn]
   }
 
   # Secrets Manager: read DB and application secrets
   statement {
-    sid     = "SecretsRead"
-    actions = ["secretsmanager:GetSecretValue"]
+    sid       = "SecretsRead"
+    actions   = ["secretsmanager:GetSecretValue"]
     resources = [var.db_secret_arn, var.app_secret_arn]
   }
 
   # KMS: decrypt secrets and S3 objects
   statement {
-    sid     = "KMSDecrypt"
-    actions = ["kms:Decrypt", "kms:GenerateDataKey"]
+    sid       = "KMSDecrypt"
+    actions   = ["kms:Decrypt", "kms:GenerateDataKey"]
     resources = [var.kms_key_arn]
   }
 }
@@ -206,12 +206,12 @@ data "aws_iam_policy_document" "document_service" {
       "textract:StartDocumentAnalysis",
       "textract:GetDocumentAnalysis",
     ]
-    resources = ["*"]  # Textract does not support resource-level permissions
+    resources = ["*"] # Textract does not support resource-level permissions
   }
 
   statement {
-    sid     = "KMSDecrypt"
-    actions = ["kms:Decrypt", "kms:GenerateDataKey"]
+    sid       = "KMSDecrypt"
+    actions   = ["kms:Decrypt", "kms:GenerateDataKey"]
     resources = [var.kms_key_arn]
   }
 }
@@ -261,22 +261,22 @@ data "aws_iam_policy_document" "ai_service" {
 
   # S3: read documents for Textract extraction
   statement {
-    sid     = "S3ReadDocuments"
-    actions = ["s3:GetObject"]
+    sid       = "S3ReadDocuments"
+    actions   = ["s3:GetObject"]
     resources = ["${var.documents_bucket_arn}/*"]
   }
 
   # DynamoDB: write compliance audit events
   statement {
-    sid     = "DynamoDBAuditWrite"
-    actions = ["dynamodb:PutItem", "dynamodb:GetItem"]
+    sid       = "DynamoDBAuditWrite"
+    actions   = ["dynamodb:PutItem", "dynamodb:GetItem"]
     resources = [var.audit_table_arn]
   }
 
   # KMS: decrypt SQS messages, S3 objects, DynamoDB data
   statement {
-    sid     = "KMSDecrypt"
-    actions = ["kms:Decrypt", "kms:GenerateDataKey"]
+    sid       = "KMSDecrypt"
+    actions   = ["kms:Decrypt", "kms:GenerateDataKey"]
     resources = [var.kms_key_arn]
   }
 }
@@ -391,8 +391,8 @@ data "aws_iam_policy_document" "alb_controller" {
   }
 
   statement {
-    sid = "AllowTaggingForALBController"
-    actions = ["ec2:DeleteSecurityGroup"]
+    sid       = "AllowTaggingForALBController"
+    actions   = ["ec2:DeleteSecurityGroup"]
     resources = ["*"]
     condition {
       test     = "StringEquals"

@@ -87,12 +87,12 @@ locals {
       width  = 12
       height = 6
       properties = {
-        title  = "Backend ASG CPU Utilization"
-        region = var.aws_region
+        title   = "Backend ASG CPU Utilization"
+        region  = var.aws_region
         metrics = [["AWS/EC2", "CPUUtilization", "AutoScalingGroupName", var.backend_asg_name]]
-        period = 300
-        stat   = "Average"
-        view   = "timeSeries"
+        period  = 300
+        stat    = "Average"
+        view    = "timeSeries"
       }
     }
   ] : []
@@ -105,12 +105,12 @@ locals {
       width  = 12
       height = 6
       properties = {
-        title  = "External ALB Request Count"
-        region = var.aws_region
+        title   = "External ALB Request Count"
+        region  = var.aws_region
         metrics = [["AWS/ApplicationELB", "RequestCount", "LoadBalancer", var.external_alb_arn_suffix]]
-        period = 300
-        stat   = "Sum"
-        view   = "timeSeries"
+        period  = 300
+        stat    = "Sum"
+        view    = "timeSeries"
       }
     },
     {
@@ -120,12 +120,12 @@ locals {
       width  = 12
       height = 6
       properties = {
-        title  = "External ALB Target Response Time"
-        region = var.aws_region
+        title   = "External ALB Target Response Time"
+        region  = var.aws_region
         metrics = [["AWS/ApplicationELB", "TargetResponseTime", "LoadBalancer", var.external_alb_arn_suffix]]
-        period = 300
-        stat   = "Average"
-        view   = "timeSeries"
+        period  = 300
+        stat    = "Average"
+        view    = "timeSeries"
       }
     }
   ] : []
@@ -138,12 +138,12 @@ locals {
       width  = 12
       height = 6
       properties = {
-        title  = "RDS CPU Utilization"
-        region = var.aws_region
+        title   = "RDS CPU Utilization"
+        region  = var.aws_region
         metrics = [["AWS/RDS", "CPUUtilization", "DBInstanceIdentifier", var.db_identifier]]
-        period = 300
-        stat   = "Average"
-        view   = "timeSeries"
+        period  = 300
+        stat    = "Average"
+        view    = "timeSeries"
       }
     },
     {
@@ -153,12 +153,12 @@ locals {
       width  = 12
       height = 6
       properties = {
-        title  = "RDS Database Connections"
-        region = var.aws_region
+        title   = "RDS Database Connections"
+        region  = var.aws_region
         metrics = [["AWS/RDS", "DatabaseConnections", "DBInstanceIdentifier", var.db_identifier]]
-        period = 300
-        stat   = "Average"
-        view   = "timeSeries"
+        period  = 300
+        stat    = "Average"
+        view    = "timeSeries"
       }
     }
   ]
@@ -169,6 +169,11 @@ locals {
 resource "aws_sns_topic" "alarms" {
 
   name = "${var.project_name}-alarms"
+
+  # Encrypt the SNS topic with the shared CargoTrack KMS CMK.
+  # The KMS key policy in modules/database/kms.tf already grants SNS
+  # GenerateDataKey + Decrypt, so no additional policy is needed.
+  kms_master_key_id = var.kms_key_arn
 
   tags = local.common_tags
 }

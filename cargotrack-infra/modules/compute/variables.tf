@@ -77,3 +77,9 @@ variable "event_bus_name" {
   description = "Name of the CargoTrack custom EventBridge event bus"
   type        = string
 }
+
+variable "sns_alarm_topic_arn" {
+  description = "ARN of the SNS topic for CloudWatch alarm notifications. Leave empty to disable alarm actions."
+  type        = string
+  default     = ""
+}

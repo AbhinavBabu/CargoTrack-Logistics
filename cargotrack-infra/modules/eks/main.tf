@@ -18,7 +18,7 @@ locals {
       max_size       = var.node_max_size
       desired_size   = var.node_desired_size
       capacity_type  = "ON_DEMAND"
-      disk_size      = 50  # GB
+      disk_size      = 50 # GB
     }
   }
 }
@@ -66,7 +66,7 @@ resource "aws_eks_cluster" "main" {
     subnet_ids              = var.app_subnet_ids
     security_group_ids      = [var.node_sg_id]
     endpoint_private_access = true
-    endpoint_public_access  = true  # allows kubectl from local machine during dev
+    endpoint_public_access  = true # allows kubectl from local machine during dev
   }
 
   # Enable EKS add-ons logging for troubleshooting
@@ -173,13 +173,13 @@ resource "aws_eks_node_group" "this" {
   # Attach the custom security group (allows RDS access, pod-to-pod, etc.)
   # Note: EKS also creates its own managed node SG; this supplements it.
   remote_access {
-    ec2_ssh_key               = null   # SSH disabled \u2014 use SSM Session Manager
+    ec2_ssh_key               = null # SSH disabled \u2014 use SSM Session Manager
     source_security_group_ids = []
   }
 
   tags = merge(local.common_tags, {
-    Name                                        = each.value.name
-    "k8s.io/cluster-autoscaler/enabled"         = "true"
+    Name                                            = each.value.name
+    "k8s.io/cluster-autoscaler/enabled"             = "true"
     "k8s.io/cluster-autoscaler/${var.project_name}" = "owned"
   })
 

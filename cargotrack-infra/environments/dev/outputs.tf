@@ -81,3 +81,52 @@ output "application_secret_arn" {
   value       = module.database.application_secret_arn
 }
 
+# ─── CDN outputs ─────────────────────────────────────────────────────────────
+
+output "cloudfront_domain_name" {
+  description = "CloudFront distribution domain — access the application at https://<value>"
+  value       = module.cdn.cloudfront_domain_name
+}
+
+output "cloudfront_distribution_id" {
+  description = "CloudFront distribution ID — use for cache invalidations"
+  value       = module.cdn.cloudfront_distribution_id
+}
+
+output "waf_web_acl_arn" {
+  description = "WAF Web ACL ARN attached to CloudFront"
+  value       = module.cdn.waf_web_acl_arn
+}
+
+# ─── ECR outputs ─────────────────────────────────────────────────────────────
+
+output "ecr_repository_urls" {
+  description = <<-EOT
+    Map of service name → ECR repository URL.
+    Use these as the image registry in Helm values files.
+    Example: ecr_repository_urls["frontend"] = "<account>.dkr.ecr.<region>.amazonaws.com/cargotrack-frontend"
+  EOT
+  value       = module.ecr.repository_urls
+}
+
+output "ecr_registry_id" {
+  description = "AWS account ID used as the ECR registry — needed for docker login"
+  value       = module.ecr.registry_id
+}
+
+# ─── DNS outputs (populated only when domain_name is set) ────────────────────
+
+output "dns_name_servers" {
+  description = "Route 53 NS records — configure at your domain registrar to complete DNS delegation (empty when domain_name is not set)"
+  value       = module.dns.zone_name_servers
+}
+
+output "acm_certificate_arn" {
+  description = "ACM certificate ARN for CloudFront HTTPS (empty when domain_name is not set)"
+  value       = module.dns.certificate_arn
+}
+
+output "dns_enabled" {
+  description = "True when a domain was provided and DNS resources were created"
+  value       = module.dns.dns_enabled
+}

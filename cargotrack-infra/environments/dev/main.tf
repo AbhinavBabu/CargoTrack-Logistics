@@ -118,7 +118,7 @@ module "endpoints" {
   vpc_id         = module.networking.vpc_id
   aws_region     = var.aws_region
   app_subnet_ids = module.networking.app_subnet_ids
-  backend_sg_id  = module.security.eks_node_sg_id  # eks_node replaces old backend SG here
+  backend_sg_id  = module.security.eks_node_sg_id # eks_node replaces old backend SG here
 
   private_route_table_ids = [
     module.networking.web_route_table_id,
@@ -154,11 +154,11 @@ module "eks" {
   app_subnet_ids = module.networking.app_subnet_ids
   node_sg_id     = module.security.eks_node_sg_id
 
-  cluster_version    = var.eks_cluster_version
+  cluster_version     = var.eks_cluster_version
   node_instance_types = var.node_instance_types
-  node_min_size      = var.node_min_size
-  node_max_size      = var.node_max_size
-  node_desired_size  = var.node_desired_size
+  node_min_size       = var.node_min_size
+  node_max_size       = var.node_max_size
+  node_desired_size   = var.node_desired_size
 }
 
 # ── IRSA (IAM Roles for Service Accounts) ─────────────────────────────────────
@@ -183,4 +183,39 @@ module "irsa" {
   kms_key_arn          = module.database.kms_key_arn
   db_secret_arn        = module.database.db_secret_arn
   app_secret_arn       = module.database.application_secret_arn
+}
+
+# ── ECR ───────────────────────────────────────────────────────────────────────
+# Provision 4 ECR repositories for CargoTrack microservice images.
+# The EKS node role is granted pull access via repository policies.
+# Images must be pushed before pods can be scheduled (CI/CD responsibility).
+
+module "ecr" {
+
+  source = "../../modules/ecr"
+
+  project_name      = var.project_name
+  eks_node_role_arn = module.eks.node_role_arn
+}
+
+# ── DNS (OPTIONAL) ───────────────────────────────────────────────────────────
+# Route 53 + ACM certificate support.
+# Set domain_name = "" (the default) to skip all DNS resource creation.
+# Set domain_name = "your-domain.com" to enable full DNS + TLS setup.
+#
+# After apply with a domain, copy the NS records from the Terraform output
+# to your domain registrar to complete DNS delegation.
+
+module "dns" {
+
+  source = "../../modules/dns"
+
+  project_name           = var.project_name
+  domain_name            = var.domain_name
+  cloudfront_domain_name = module.cdn.cloudfront_domain_name
+
+  providers = {
+    aws           = aws
+    aws.us_east_1 = aws.us_east_1
+  }
 }

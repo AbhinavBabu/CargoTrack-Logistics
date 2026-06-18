@@ -29,3 +29,8 @@ output "backend_target_group_arn" {
 output "backend_asg_name" {
   value = aws_autoscaling_group.backend.name
 }
+
+output "frontend_asg_name" {
+  description = "Name of the frontend Auto Scaling Group"
+  value       = aws_autoscaling_group.frontend.name
+}

@@ -1,4 +1,4 @@
-﻿module "networking" {
+module "networking" {
 
   source = "../../modules/networking"
 
@@ -128,9 +128,9 @@ module "lambda_errors_alarm" {
   source  = "terraform-aws-modules/cloudwatch/aws//modules/metric-alarm"
   version = "~> 5.0"
 
-  alarm_name          = "${var.project_name}-lambda-errors"
-  alarm_description   = "Document processor Lambda errors — audit records may not be written to DynamoDB"
-  actions_enabled     = true
+  alarm_name        = "${var.project_name}-lambda-errors"
+  alarm_description = "Document processor Lambda errors — audit records may not be written to DynamoDB"
+  actions_enabled   = true
 
   alarm_actions             = [module.monitoring.sns_topic_arn]
   ok_actions                = [module.monitoring.sns_topic_arn]

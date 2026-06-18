@@ -110,7 +110,7 @@ resource "aws_subnet" "subnets" {
 
       # EKS subnet discovery tags (required for AWS Load Balancer Controller)
       "kubernetes.io/cluster/${var.project_name}" = "shared"
-      "kubernetes.io/role/elb"                   = local.eks_elb_role[each.value.tier]
+      "kubernetes.io/role/elb"                    = local.eks_elb_role[each.value.tier]
       "kubernetes.io/role/internal-elb"           = local.eks_internal_elb_role[each.value.tier]
     }
   )

@@ -1,4 +1,4 @@
-﻿data "aws_caller_identity" "current" {}
+data "aws_caller_identity" "current" {}
 
 data "aws_ami" "ubuntu" {
 
@@ -534,4 +534,151 @@ resource "aws_lb_listener" "internal_http" {
     type             = "forward"
     target_group_arn = aws_lb_target_group.backend.arn
   }
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AUTO SCALING — Target Tracking Policies
+# Target: 50% average CPU utilisation across the ASG.
+# AWS automatically creates and manages the underlying CloudWatch alarms
+# for scale-out (CPU > 50%) and scale-in (CPU < 50%) via target tracking.
+# ─────────────────────────────────────────────────────────────────────────────
+
+resource "aws_autoscaling_policy" "frontend_cpu" {
+
+  name                   = "${var.project_name}-frontend-cpu-tracking"
+  autoscaling_group_name = aws_autoscaling_group.frontend.name
+  policy_type            = "TargetTrackingScaling"
+
+  target_tracking_configuration {
+
+    predefined_metric_specification {
+      predefined_metric_type = "ASGAverageCPUUtilization"
+    }
+
+    target_value = 50.0
+
+    # Allow 5 minutes for a new instance to become healthy before scaling in
+    disable_scale_in = false
+  }
+}
+
+resource "aws_autoscaling_policy" "backend_cpu" {
+
+  name                   = "${var.project_name}-backend-cpu-tracking"
+  autoscaling_group_name = aws_autoscaling_group.backend.name
+  policy_type            = "TargetTrackingScaling"
+
+  target_tracking_configuration {
+
+    predefined_metric_specification {
+      predefined_metric_type = "ASGAverageCPUUtilization"
+    }
+
+    target_value = 50.0
+
+    disable_scale_in = false
+  }
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CLOUDWATCH ALARMS — CPU Monitoring (supplemental / for SNS notifications)
+# The target-tracking policies above already fire alarms internally.
+# These explicit alarms send notifications to an SNS topic so operators
+# are alerted when scaling events occur.
+# ─────────────────────────────────────────────────────────────────────────────
+
+resource "aws_cloudwatch_metric_alarm" "frontend_cpu_high" {
+
+  alarm_name          = "${var.project_name}-frontend-cpu-high"
+  alarm_description   = "Frontend ASG CPU utilization exceeded 80% — scale-out may be needed"
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  statistic           = "Average"
+  period              = 300
+  evaluation_periods  = 2
+  threshold           = 80
+  comparison_operator = "GreaterThanThreshold"
+
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.frontend.name
+  }
+
+  alarm_actions = var.sns_alarm_topic_arn != "" ? [var.sns_alarm_topic_arn] : []
+  ok_actions    = var.sns_alarm_topic_arn != "" ? [var.sns_alarm_topic_arn] : []
+
+  treat_missing_data = "notBreaching"
+
+  tags = local.common_tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "frontend_cpu_low" {
+
+  alarm_name          = "${var.project_name}-frontend-cpu-low"
+  alarm_description   = "Frontend ASG CPU utilization below 20% — scale-in may occur"
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  statistic           = "Average"
+  period              = 300
+  evaluation_periods  = 3
+  threshold           = 20
+  comparison_operator = "LessThanThreshold"
+
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.frontend.name
+  }
+
+  alarm_actions = var.sns_alarm_topic_arn != "" ? [var.sns_alarm_topic_arn] : []
+  ok_actions    = var.sns_alarm_topic_arn != "" ? [var.sns_alarm_topic_arn] : []
+
+  treat_missing_data = "notBreaching"
+
+  tags = local.common_tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "backend_cpu_high" {
+
+  alarm_name          = "${var.project_name}-backend-cpu-high"
+  alarm_description   = "Backend ASG CPU utilization exceeded 80% — scale-out may be needed"
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  statistic           = "Average"
+  period              = 300
+  evaluation_periods  = 2
+  threshold           = 80
+  comparison_operator = "GreaterThanThreshold"
+
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.backend.name
+  }
+
+  alarm_actions = var.sns_alarm_topic_arn != "" ? [var.sns_alarm_topic_arn] : []
+  ok_actions    = var.sns_alarm_topic_arn != "" ? [var.sns_alarm_topic_arn] : []
+
+  treat_missing_data = "notBreaching"
+
+  tags = local.common_tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "backend_cpu_low" {
+
+  alarm_name          = "${var.project_name}-backend-cpu-low"
+  alarm_description   = "Backend ASG CPU utilization below 20% — scale-in may occur"
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  statistic           = "Average"
+  period              = 300
+  evaluation_periods  = 3
+  threshold           = 20
+  comparison_operator = "LessThanThreshold"
+
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.backend.name
+  }
+
+  alarm_actions = var.sns_alarm_topic_arn != "" ? [var.sns_alarm_topic_arn] : []
+  ok_actions    = var.sns_alarm_topic_arn != "" ? [var.sns_alarm_topic_arn] : []
+
+  treat_missing_data = "notBreaching"
+
+  tags = local.common_tags
 }

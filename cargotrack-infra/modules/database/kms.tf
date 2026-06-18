@@ -119,6 +119,23 @@ data "aws_iam_policy_document" "kms_key_policy" {
 
     resources = ["*"]
   }
+
+  statement {
+
+    sid = "AllowSNS"
+
+    principals {
+      type        = "Service"
+      identifiers = ["sns.amazonaws.com"]
+    }
+
+    actions = [
+      "kms:GenerateDataKey",
+      "kms:Decrypt"
+    ]
+
+    resources = ["*"]
+  }
 }
 
 resource "aws_kms_key" "main" {
