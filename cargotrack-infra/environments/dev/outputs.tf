@@ -1,4 +1,4 @@
-# \u2500\u2500\u2500 EKS outputs (used for kubectl config and Helm values injection)
+# ── EKS outputs (used for kubectl config and Helm values injection) ───────────
 
 output "eks_cluster_name" {
   description = "EKS cluster name — use with: aws eks update-kubeconfig --name <value>"
@@ -15,7 +15,7 @@ output "eks_oidc_issuer_url" {
   value       = module.eks.oidc_issuer_url
 }
 
-# \u2500\u2500\u2500 IRSA role ARNs (inject into Helm values-dev.yaml for ServiceAccount annotations)
+# ── IRSA role ARNs (inject into Helm values-dev.yaml for ServiceAccount annotations)
 
 output "irsa_core_service_role_arn" {
   description = "IRSA role ARN for core-service — annotate ServiceAccount in Helm"
@@ -37,7 +37,12 @@ output "irsa_alb_controller_role_arn" {
   value       = module.irsa.alb_controller_role_arn
 }
 
-# \u2500\u2500\u2500 AWS resource identifiers (used in Helm values for microservice env vars)
+output "irsa_cluster_autoscaler_role_arn" {
+  description = "IRSA role ARN for Cluster Autoscaler (kube-system:cluster-autoscaler)"
+  value       = module.irsa.cluster_autoscaler_role_arn
+}
+
+# ── AWS resource identifiers (used in Helm values for microservice env vars) ──
 
 output "rds_endpoint" {
   description = "RDS PostgreSQL endpoint"
@@ -81,7 +86,7 @@ output "application_secret_arn" {
   value       = module.database.application_secret_arn
 }
 
-# ─── CDN outputs ─────────────────────────────────────────────────────────────
+# ── CDN outputs ───────────────────────────────────────────────────────────────
 
 output "cloudfront_domain_name" {
   description = "CloudFront distribution domain — access the application at https://<value>"
@@ -98,7 +103,7 @@ output "waf_web_acl_arn" {
   value       = module.cdn.waf_web_acl_arn
 }
 
-# ─── ECR outputs ─────────────────────────────────────────────────────────────
+# ── ECR outputs ───────────────────────────────────────────────────────────────
 
 output "ecr_repository_urls" {
   description = <<-EOT
@@ -114,7 +119,12 @@ output "ecr_registry_id" {
   value       = module.ecr.registry_id
 }
 
-# ─── DNS outputs (populated only when domain_name is set) ────────────────────
+output "github_actions_ecr_role_arn" {
+  description = "IAM role ARN for GitHub Actions OIDC ECR push — set as AWS_ECR_PUSH_ROLE_ARN in GitHub secrets"
+  value       = module.ecr.github_actions_role_arn
+}
+
+# ── DNS outputs (populated only when domain_name is set) ─────────────────────
 
 output "dns_name_servers" {
   description = "Route 53 NS records — configure at your domain registrar to complete DNS delegation (empty when domain_name is not set)"

@@ -17,3 +17,9 @@ output "registry_id" {
   description = "AWS account ID — the ECR registry ID (same for all repos in this account)"
   value       = data.aws_caller_identity.current.account_id
 }
+
+output "github_actions_role_arn" {
+  description = "IAM role ARN for GitHub Actions OIDC ECR push — set as GitHub secret AWS_ECR_PUSH_ROLE_ARN"
+  value       = aws_iam_role.github_actions_ecr.arn
+}
+

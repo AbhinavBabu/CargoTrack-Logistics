@@ -287,11 +287,9 @@ resource "aws_iam_role_policy" "ai_service" {
   policy = data.aws_iam_policy_document.ai_service.json
 }
 
-# \u2500\u2500\u2500 AWS Load Balancer Controller permissions \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-# The AWS LBC needs broad EC2/ELB permissions to create and manage ALBs.
-# AWS publishes the official policy at:
+# ─── AWS Load Balancer Controller permissions ───────────────────────────────
+# Permissions match the official AWS LBC v2.7+ IAM policy:
 # https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json
-# We embed the key permissions here instead of using a remote data source.
 
 data "aws_iam_policy_document" "alb_controller" {
   statement {
@@ -306,6 +304,7 @@ data "aws_iam_policy_document" "alb_controller" {
       "ec2:DescribeVpcPeeringConnections",
       "ec2:DescribeSubnets",
       "ec2:DescribeSecurityGroups",
+      "ec2:DescribeSecurityGroupRules", # Required by LBC v2.7+ for SG rule management
       "ec2:DescribeInstances",
       "ec2:DescribeNetworkInterfaces",
       "ec2:DescribeTags",
@@ -406,4 +405,78 @@ resource "aws_iam_role_policy" "alb_controller" {
   name   = "${var.project_name}-alb-controller-policy"
   role   = aws_iam_role.alb_controller.id
   policy = data.aws_iam_policy_document.alb_controller.json
+}
+
+# ─── Cluster Autoscaler IRSA ──────────────────────────────────────────────────
+# The node group in modules/eks already has the required discovery tags:
+#   k8s.io/cluster-autoscaler/enabled             = "true"
+#   k8s.io/cluster-autoscaler/<cluster_name>       = "owned"
+# This role is consumed by the cluster-autoscaler Helm chart service account.
+
+data "aws_iam_policy_document" "cluster_autoscaler_assume" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    effect  = "Allow"
+    principals {
+      type        = "Federated"
+      identifiers = [var.oidc_provider_arn]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "${local.oidc_host}:sub"
+      values   = ["system:serviceaccount:kube-system:cluster-autoscaler"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "${local.oidc_host}:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "cluster_autoscaler" {
+  name               = "${var.project_name}-irsa-cluster-autoscaler"
+  assume_role_policy = data.aws_iam_policy_document.cluster_autoscaler_assume.json
+  tags               = merge(local.common_tags, { Service = "cluster-autoscaler" })
+}
+
+data "aws_iam_policy_document" "cluster_autoscaler" {
+  # Read permissions — discover node groups and their current state
+  statement {
+    sid = "AutoscalerDescribe"
+    actions = [
+      "autoscaling:DescribeAutoScalingGroups",
+      "autoscaling:DescribeAutoScalingInstances",
+      "autoscaling:DescribeLaunchConfigurations",
+      "autoscaling:DescribeScalingActivities",
+      "autoscaling:DescribeTags",
+      "ec2:DescribeLaunchTemplateVersions",
+      "ec2:DescribeInstanceTypes",
+      "ec2:DescribeImages",
+      "ec2:GetInstanceTypesFromInstanceRequirements",
+      "eks:DescribeNodegroup",
+    ]
+    resources = ["*"]
+  }
+
+  # Write permissions — scale node groups; scoped to this cluster's tagged ASGs
+  statement {
+    sid = "AutoscalerModify"
+    actions = [
+      "autoscaling:SetDesiredCapacity",
+      "autoscaling:TerminateInstanceInAutoScalingGroup",
+    ]
+    resources = ["*"]
+    condition {
+      test     = "StringEquals"
+      variable = "autoscaling:ResourceTag/k8s.io/cluster-autoscaler/${var.cluster_name}"
+      values   = ["owned"]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "cluster_autoscaler" {
+  name   = "${var.project_name}-cluster-autoscaler-policy"
+  role   = aws_iam_role.cluster_autoscaler.id
+  policy = data.aws_iam_policy_document.cluster_autoscaler.json
 }
