@@ -37,3 +37,18 @@ output "cluster_role_arn" {
   description = "ARN of the EKS cluster IAM role"
   value       = aws_iam_role.cluster.arn
 }
+
+output "cluster_sg_id" {
+  description = <<-EOT
+    The EKS-managed cluster security group ID.
+
+    AWS automatically creates this SG when the EKS cluster is created and
+    attaches it to EVERY managed node ENI. It is distinct from any
+    Terraform-managed SG passed to vpc_config.security_group_ids, which is
+    only attached to the control plane ENIs.
+
+    This output is consumed by module.security to create the RDS ingress rule
+    that actually allows node-to-RDS connectivity.
+  EOT
+  value       = aws_eks_cluster.main.vpc_config[0].cluster_security_group_id
+}

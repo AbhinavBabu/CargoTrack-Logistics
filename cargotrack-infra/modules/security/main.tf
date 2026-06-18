@@ -187,13 +187,29 @@ resource "aws_vpc_security_group_ingress_rule" "eks_node_from_control_plane" {
   ip_protocol = "tcp"
 }
 
-# Critical: allows microservice pods to reach RDS PostgreSQL
-resource "aws_vpc_security_group_ingress_rule" "database_from_eks_node" {
-
-  security_group_id            = aws_security_group.this["database"].id
-  referenced_security_group_id = aws_security_group.this["eks_node"].id
-
-  from_port   = 5432
-  to_port     = 5432
-  ip_protocol = "tcp"
-}
+# ── RDS ingress from EKS nodes ─────────────────────────────────────────────────
+#
+# ARCHITECTURE NOTE — Why this rule is NOT in this module:
+#
+# Two distinct security groups exist in an EKS cluster:
+#
+#   A. cargotrack-eks_node-sg  (created here, by module.security)
+#      Passed to aws_eks_cluster.vpc_config.security_group_ids.
+#      AWS attaches it to the CONTROL PLANE ENIs only. Worker nodes do NOT
+#      carry this SG unless a custom launch template overrides the node SG.
+#
+#   B. eks-cluster-sg-cargotrack-* (auto-created by AWS at cluster creation)
+#      aws_eks_cluster.main.vpc_config[0].cluster_security_group_id
+#      AWS attaches this to EVERY managed node ENI automatically. This is the
+#      SG that actually governs inbound traffic on the worker node EC2s.
+#
+# The RDS ingress rule must reference SG (B), not SG (A). SG (B) is only
+# known after the EKS cluster is created, creating a circular dependency if
+# this module tries to reference it (module.security runs before module.eks).
+#
+# SOLUTION: The RDS ingress rule lives at the environment level in:
+#   environments/dev/main.tf
+#   resource "aws_vpc_security_group_ingress_rule" "database_from_cluster_sg"
+#
+# That resource can reference both module.security.database_sg_id and
+# module.eks.cluster_sg_id without any circular dependency.

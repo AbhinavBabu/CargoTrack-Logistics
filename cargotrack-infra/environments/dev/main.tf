@@ -167,6 +167,59 @@ module "eks" {
   node_desired_size   = var.node_desired_size
 }
 
+# ── RDS ingress from EKS worker nodes ─────────────────────────────────────────
+#
+# WHY THIS IS AT THE ENVIRONMENT LEVEL (not inside module.security):
+#
+#   EKS managed node groups receive security groups from TWO sources:
+#
+#   1. cargotrack-eks_node-sg  (Terraform-managed, created by module.security)
+#      Passed to aws_eks_cluster.vpc_config.security_group_ids.
+#      AWS attaches this to CONTROL PLANE ENIs only — the cross-account ENIs
+#      EKS creates in your VPC to enable cluster-to-node communication.
+#      Worker node EC2 instances do NOT carry this SG.
+#
+#   2. eks-cluster-sg-cargotrack-* (auto-created by AWS at cluster creation time)
+#      Exposed as: aws_eks_cluster.main.vpc_config[0].cluster_security_group_id
+#      module.eks output: module.eks.cluster_sg_id
+#      AWS automatically attaches this to EVERY managed node ENI. This is the
+#      SG that controls actual inbound/outbound traffic on the worker nodes.
+#
+#   Consequence: Any RDS ingress rule that references cargotrack-eks_node-sg (#1)
+#   has NO effect because the worker nodes never carry that SG. The previous rule
+#   `database_from_eks_node` in module.security was wrong — it referenced #1.
+#
+# WHY IT CANNOT LIVE IN module.security:
+#   module.security is instantiated before module.eks (EKS needs the eks_node SG).
+#   cluster_sg_id (#2) is only known after the EKS cluster is created.
+#   Putting this rule inside module.security would create a circular dependency.
+#
+#   At the environment level, both outputs are available with no cycle:
+#     module.security.database_sg_id  ← security group to protect (RDS)
+#     module.eks.cluster_sg_id        ← source of the traffic (worker nodes)
+#
+# DESTROY SAFETY:
+#   Terraform destroys this rule before either module (dependency graph reversal).
+#   No dangling SG rules after destroy.
+
+resource "aws_vpc_security_group_ingress_rule" "database_from_cluster_sg" {
+
+  security_group_id            = module.security.database_sg_id
+  referenced_security_group_id = module.eks.cluster_sg_id
+
+  from_port   = 5432
+  to_port     = 5432
+  ip_protocol = "tcp"
+
+  tags = {
+    Name      = "cargotrack-rds-from-eks-cluster-sg"
+    ManagedBy = "Terraform"
+    Purpose   = "Allow EKS worker nodes to reach RDS PostgreSQL on port 5432"
+  }
+}
+
+
+
 # ── IRSA (IAM Roles for Service Accounts) ─────────────────────────────────────
 # Per-service IAM roles scoped to exact Kubernetes service account names.
 # Each microservice gets only the permissions it needs (least privilege).
