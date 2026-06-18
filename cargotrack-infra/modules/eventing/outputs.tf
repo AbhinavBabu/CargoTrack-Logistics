@@ -52,3 +52,9 @@ output "compliance_dlq_url" {
   description = "URL of the compliance trigger dead-letter queue"
   value       = aws_sqs_queue.compliance_dlq.id
 }
+
+output "compliance_queue_name" {
+  description = "Name of the compliance trigger SQS queue — used as CloudWatch metric dimension"
+  value       = aws_sqs_queue.compliance.name
+}
+

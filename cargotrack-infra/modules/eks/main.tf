@@ -132,8 +132,9 @@ locals {
   node_policies = toset([
     "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy",
     "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy",
-    "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly", # needed to pull ECR images (future use)
-    "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",       # allows SSM Session Manager access to nodes
+    "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly", # pull ECR images
+    "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",       # SSM Session Manager
+    "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy",        # Container Insights metrics + logs
   ])
 }
 
@@ -143,7 +144,39 @@ resource "aws_iam_role_policy_attachment" "node" {
   policy_arn = each.value
 }
 
-# \u2500\u2500\u2500 Managed Node Group \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+# ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+# Installs the amazon-cloudwatch-observability EKS add-on.
+# This add-on deploys:
+#   - CloudWatch Agent DaemonSet  — collects node CPU, memory, network, disk
+#   - Fluent Bit DaemonSet        — forwards pod stdout/stderr to CloudWatch Logs
+# Log groups created automatically:
+#   /aws/containerinsights/<cluster>/application  — pod logs
+#   /aws/containerinsights/<cluster>/host         — node OS logs
+#   /aws/containerinsights/<cluster>/performance  — Container Insights metrics
+#
+# The node role already has CloudWatchAgentServerPolicy attached above,
+# so no separate IRSA role is needed for this add-on.
+
+resource "aws_eks_addon" "cloudwatch_observability" {
+  cluster_name                = aws_eks_cluster.main.name
+  addon_name                  = "amazon-cloudwatch-observability"
+  resolve_conflicts_on_create = "OVERWRITE"
+  resolve_conflicts_on_update = "OVERWRITE"
+
+  # Add-on runs with the node role (CloudWatchAgentServerPolicy is attached above)
+  service_account_role_arn = aws_iam_role.node.arn
+
+  tags = merge(local.common_tags, {
+    Name = "${var.project_name}-cloudwatch-observability"
+  })
+
+  depends_on = [
+    aws_iam_role_policy_attachment.node,
+    aws_eks_node_group.this,
+  ]
+}
+
+# ──────────────────────────────────────────────────────────────────────────
 
 resource "aws_eks_node_group" "this" {
   for_each = local.node_groups
@@ -170,12 +203,11 @@ resource "aws_eks_node_group" "this" {
     max_unavailable = 1
   }
 
-  # Attach the custom security group (allows RDS access, pod-to-pod, etc.)
-  # Note: EKS also creates its own managed node SG; this supplements it.
-  remote_access {
-    ec2_ssh_key               = null # SSH disabled \u2014 use SSM Session Manager
-    source_security_group_ids = []
-  }
+  # SSH access is intentionally disabled.
+  # Node access is via SSM Session Manager — no remote_access block needed.
+  # AmazonSSMManagedInstanceCore is already attached to the node IAM role.
+  # (Presence of any remote_access{} block — even with ec2_ssh_key = null —
+  #  causes AWS to create an SSH security group and forces node group replacement.)
 
   tags = merge(local.common_tags, {
     Name                                            = each.value.name

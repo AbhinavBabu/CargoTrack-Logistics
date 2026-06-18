@@ -18,7 +18,7 @@ image:
 # ── Core Service ──────────────────────────────────────────────────────────────
 coreService:
   image: cargotrack-core
-  tag: latest
+  tag: v1
   replicas: 2
   port: 4000
   resources:
@@ -38,7 +38,7 @@ coreService:
 # ── Document Service ──────────────────────────────────────────────────────────
 documentService:
   image: cargotrack-docs
-  tag: latest
+  tag: v1
   replicas: 2
   port: 4001
   resources:
@@ -60,7 +60,7 @@ documentService:
 # Use minReplicas: 1 in values-prod.yaml if strict singleton is required.
 aiService:
   image: cargotrack-ai
-  tag: latest
+  tag: v1
   replicas: 2
   port: 4002
   resources:
@@ -82,7 +82,7 @@ aiService:
 # ── Frontend ──────────────────────────────────────────────────────────────────
 frontend:
   image: cargotrack-frontend
-  tag: latest
+  tag: v1
   replicas: 2
   port: 80
   resources:

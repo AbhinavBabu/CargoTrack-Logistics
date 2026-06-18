@@ -72,10 +72,92 @@ locals {
         DBInstanceIdentifier = var.db_identifier
       }
     }
+
+    rds_storage_low = {
+      alarm_name          = "${var.project_name}-rds-storage-low"
+      alarm_description   = "RDS free storage space dropped below ${var.rds_storage_threshold_gb}GB"
+      metric_name         = "FreeStorageSpace"
+      namespace           = "AWS/RDS"
+      statistic           = "Average"
+      period              = 300
+      evaluation_periods  = 2
+      threshold           = var.rds_storage_threshold_gb * 1073741824 # GB → bytes
+      comparison_operator = "LessThanThreshold"
+      dimensions = {
+        DBInstanceIdentifier = var.db_identifier
+      }
+    }
   }
 
+  # EKS / Container Insights alarms — only created when eks_cluster_name is provided.
+  # Metrics are published by the amazon-cloudwatch-observability add-on.
+  eks_alarms = var.eks_cluster_name != "" ? {
+    eks_node_cpu_high = {
+      alarm_name          = "${var.project_name}-eks-node-cpu-high"
+      alarm_description   = "EKS node average CPU utilization exceeded 80%"
+      metric_name         = "node_cpu_utilization"
+      namespace           = "ContainerInsights"
+      statistic           = "Average"
+      period              = 300
+      evaluation_periods  = 2
+      threshold           = 80
+      comparison_operator = "GreaterThanThreshold"
+      dimensions = {
+        ClusterName = var.eks_cluster_name
+      }
+    }
+
+    eks_node_memory_high = {
+      alarm_name          = "${var.project_name}-eks-node-memory-high"
+      alarm_description   = "EKS node average memory utilization exceeded 80%"
+      metric_name         = "node_memory_utilization"
+      namespace           = "ContainerInsights"
+      statistic           = "Average"
+      period              = 300
+      evaluation_periods  = 2
+      threshold           = 80
+      comparison_operator = "GreaterThanThreshold"
+      dimensions = {
+        ClusterName = var.eks_cluster_name
+      }
+    }
+
+    eks_pod_restarts_high = {
+      alarm_name          = "${var.project_name}-eks-pod-restarts-high"
+      alarm_description   = "EKS pod restart count exceeded threshold — possible crash loop"
+      metric_name         = "pod_number_of_container_restarts"
+      namespace           = "ContainerInsights"
+      statistic           = "Sum"
+      period              = 300
+      evaluation_periods  = 2
+      threshold           = 5
+      comparison_operator = "GreaterThanThreshold"
+      dimensions = {
+        ClusterName = var.eks_cluster_name
+      }
+    }
+  } : {}
+
+  # SQS depth alarm — only created when compliance_queue_name is provided.
+  sqs_alarms = var.compliance_queue_name != "" ? {
+    sqs_compliance_depth_high = {
+      alarm_name          = "${var.project_name}-sqs-compliance-depth-high"
+      alarm_description   = "SQS compliance trigger queue depth exceeded ${var.sqs_depth_threshold} messages"
+      metric_name         = "ApproximateNumberOfMessagesVisible"
+      namespace           = "AWS/SQS"
+      statistic           = "Maximum"
+      period              = 300
+      evaluation_periods  = 2
+      threshold           = var.sqs_depth_threshold
+      comparison_operator = "GreaterThanThreshold"
+      dimensions = {
+        QueueName = var.compliance_queue_name
+      }
+    }
+  } : {}
+
   # Merge all alarm maps — only non-empty maps contribute entries
-  alarms = merge(local.asg_alarms, local.alb_alarms, local.rds_alarms)
+  alarms = merge(local.asg_alarms, local.alb_alarms, local.rds_alarms, local.eks_alarms, local.sqs_alarms)
 
   # Dashboard widgets — built conditionally to avoid empty-string metric dimensions
   # CloudWatch rejects widgets whose dimension values are empty strings.
@@ -160,10 +242,91 @@ locals {
         stat    = "Average"
         view    = "timeSeries"
       }
+    },
+    {
+      type   = "metric"
+      x      = 12
+      y      = 12
+      width  = 12
+      height = 6
+      properties = {
+        title   = "RDS Free Storage Space"
+        region  = var.aws_region
+        metrics = [["AWS/RDS", "FreeStorageSpace", "DBInstanceIdentifier", var.db_identifier]]
+        period  = 300
+        stat    = "Average"
+        view    = "timeSeries"
+      }
     }
   ]
 
-  dashboard_widgets = concat(local.asg_widgets, local.alb_widgets, local.rds_widgets)
+  eks_widgets = var.eks_cluster_name != "" ? [
+    {
+      type   = "metric"
+      x      = 0
+      y      = 18
+      width  = 8
+      height = 6
+      properties = {
+        title   = "EKS Node CPU Utilization"
+        region  = var.aws_region
+        metrics = [["ContainerInsights", "node_cpu_utilization", "ClusterName", var.eks_cluster_name]]
+        period  = 300
+        stat    = "Average"
+        view    = "timeSeries"
+      }
+    },
+    {
+      type   = "metric"
+      x      = 8
+      y      = 18
+      width  = 8
+      height = 6
+      properties = {
+        title   = "EKS Node Memory Utilization"
+        region  = var.aws_region
+        metrics = [["ContainerInsights", "node_memory_utilization", "ClusterName", var.eks_cluster_name]]
+        period  = 300
+        stat    = "Average"
+        view    = "timeSeries"
+      }
+    },
+    {
+      type   = "metric"
+      x      = 16
+      y      = 18
+      width  = 8
+      height = 6
+      properties = {
+        title   = "EKS Pod Restarts"
+        region  = var.aws_region
+        metrics = [["ContainerInsights", "pod_number_of_container_restarts", "ClusterName", var.eks_cluster_name]]
+        period  = 300
+        stat    = "Sum"
+        view    = "timeSeries"
+      }
+    }
+  ] : []
+
+  sqs_widgets = var.compliance_queue_name != "" ? [
+    {
+      type   = "metric"
+      x      = 0
+      y      = 24
+      width  = 12
+      height = 6
+      properties = {
+        title   = "SQS Compliance Queue Depth"
+        region  = var.aws_region
+        metrics = [["AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", var.compliance_queue_name]]
+        period  = 300
+        stat    = "Maximum"
+        view    = "timeSeries"
+      }
+    }
+  ] : []
+
+  dashboard_widgets = concat(local.asg_widgets, local.alb_widgets, local.rds_widgets, local.eks_widgets, local.sqs_widgets)
 }
 
 resource "aws_sns_topic" "alarms" {

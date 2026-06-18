@@ -1,8 +1,9 @@
-# CargoTrack Dev Environment Overrides
+# CargoTrack Dev Environment — Image + AWS resource overrides
 # ─────────────────────────────────────────────────────────────────────────────
-# After terraform apply, run:
-#   bash scripts/post-apply-setup.sh
-# That script auto-populates every "INJECT:" field below from terraform output.
+# ECR registry and image tags are set here permanently.
+# The GitHub Actions workflow (build-push.yml) overwrites .image.registry and
+# *.tag on every push — this file holds the last-known-good values for the
+# manually-pushed v1 images.
 # ─────────────────────────────────────────────────────────────────────────────
 
 global:
@@ -11,24 +12,24 @@ global:
   namespace: cargotrack
 
 image:
-  # ECR registry: <account_id>.dkr.ecr.us-east-1.amazonaws.com
-  # INJECT: terraform output ecr_registry_id → "<id>.dkr.ecr.us-east-1.amazonaws.com"
-  registry: ""         # INJECT by post-apply-setup.sh
+  # ECR registry: <account_id>.dkr.ecr.<region>.amazonaws.com
+  registry: "692828329130.dkr.ecr.us-east-1.amazonaws.com"
   pullPolicy: Always
 
-# ── IRSA role ARNs — populated by post-apply-setup.sh ───────────────────────
+# ── Image tags — all services use the v1 manually-pushed tag ─────────────────
+# GitHub Actions overwrites these with the git SHA on every push.
 coreService:
-  tag: latest
+  tag: "v1"
   serviceAccount:
     roleArn: ""        # INJECT: terraform output irsa_core_service_role_arn
 
 documentService:
-  tag: latest
+  tag: "v1"
   serviceAccount:
     roleArn: ""        # INJECT: terraform output irsa_document_service_role_arn
 
 aiService:
-  tag: latest
+  tag: "v1"
   serviceAccount:
     roleArn: ""        # INJECT: terraform output irsa_ai_service_role_arn
   env:
@@ -36,21 +37,23 @@ aiService:
     TEXTRACT_ENABLED: "false"   # Set to "true" when Textract permissions verified
 
 frontend:
-  tag: latest
+  tag: "v1"
 
 # ── HPA — dev: enabled with default CPU targets ───────────────────────────────
 hpa:
   enabled: true
 
-# ── AWS resource connections — populated by post-apply-setup.sh ───────────────
+# ── AWS resource connections ───────────────────────────────────────────────────
+# These are injected by the post-apply step or set manually after terraform apply.
+# Run: terraform output -json | jq to retrieve each value.
 aws:
   region: us-east-1
-  rdsEndpoint: ""         # INJECT: terraform output rds_endpoint
+  rdsEndpoint: ""         # terraform output -raw rds_endpoint
   rdsDatabase: cargotrack
   rdsUsername: cargotrack
-  s3BucketName: ""        # INJECT: terraform output s3_bucket_name
-  eventBusName: ""        # INJECT: terraform output event_bus_name
-  complianceQueueUrl: ""  # INJECT: terraform output compliance_queue_url
-  auditTableName: ""      # INJECT: terraform output dynamodb_audit_table
-  dbSecretArn: ""         # INJECT: terraform output db_secret_arn
-  appSecretArn: ""        # INJECT: terraform output application_secret_arn
+  s3BucketName: ""        # terraform output -raw s3_bucket_name
+  eventBusName: ""        # terraform output -raw event_bus_name
+  complianceQueueUrl: ""  # terraform output -raw compliance_queue_url
+  auditTableName: ""      # terraform output -raw dynamodb_audit_table
+  dbSecretArn: ""         # terraform output -raw db_secret_arn
+  appSecretArn: ""        # terraform output -raw application_secret_arn
