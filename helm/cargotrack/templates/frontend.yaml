@@ -1,4 +1,23 @@
 ---
+# ── Frontend ServiceAccount ───────────────────────────────────────────────────
+# No IRSA: nginx is stateless and makes no direct AWS API calls.
+# AWS calls are proxied through core-service and document-service (which have IRSA).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: frontend
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: frontend
+    {{- include "cargotrack.labels" . | nindent 4 }}
+automountServiceAccountToken: false
+---
+# ── Frontend Deployment ───────────────────────────────────────────────────────
+# nginx reverse proxy + React SPA static file server.
+# Acts as the entry point for all browser traffic.
+# At startup, entrypoint.sh runs envsubst to inject:
+#   CORE_SERVICE_URL     → nginx.conf proxy_pass for /api/*
+#   DOCUMENT_SERVICE_URL → nginx.conf proxy_pass for /api/documents/*
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -7,44 +26,96 @@ metadata:
   labels:
     app: frontend
     {{- include "cargotrack.labels" . | nindent 4 }}
+  annotations:
+    kubernetes.io/change-cause: "Helm release {{ .Release.Revision }}"
 spec:
   replicas: {{ .Values.frontend.replicas }}
   selector:
     matchLabels:
       app: frontend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0    # zero-downtime rolling update
   template:
     metadata:
       labels:
         app: frontend
     spec:
+      serviceAccountName: frontend
+      terminationGracePeriodSeconds: 30
+
+      # ── Spread pods across availability zones ─────────────────────────────
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: frontend
+
+      # ── Pod-level security context ─────────────────────────────────────────
+      # nginx group owns cache/log directories
+      securityContext:
+        fsGroup: 101    # nginx group ID
+
       containers:
         - name: frontend
           image: {{ .Values.image.registry }}/{{ .Values.frontend.image }}:{{ .Values.frontend.tag }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
-            - containerPort: {{ .Values.frontend.port }}
+            - name: http
+              containerPort: {{ .Values.frontend.port }}
+              protocol: TCP
+
           env:
+            # Injected by entrypoint.sh via envsubst into nginx.conf template
             - name: CORE_SERVICE_URL
               value: "http://core-service:{{ .Values.coreService.port }}"
             - name: DOCUMENT_SERVICE_URL
               value: "http://document-service:{{ .Values.documentService.port }}"
+
+          # ── Resource management ───────────────────────────────────────────
           resources:
             {{- toYaml .Values.frontend.resources | nindent 12 }}
+
+          # ── Readiness probe ───────────────────────────────────────────────
+          # /health is defined in nginx.conf — returns 200 OK when nginx is ready.
+          # FIXED: was "/" which always returned 200 even before envsubst completed.
           readinessProbe:
             httpGet:
-              path: /
-              port: {{ .Values.frontend.port }}
+              path: /health
+              port: http
             initialDelaySeconds: 10
             periodSeconds: 10
+            timeoutSeconds: 3
             failureThreshold: 3
+            successThreshold: 1
+
+          # ── Liveness probe ────────────────────────────────────────────────
           livenessProbe:
             httpGet:
-              path: /
-              port: {{ .Values.frontend.port }}
+              path: /health
+              port: http
             initialDelaySeconds: 20
             periodSeconds: 30
+            timeoutSeconds: 3
             failureThreshold: 3
+            successThreshold: 1
+
+          # ── Container-level security context ──────────────────────────────
+          # nginx MUST run as root to bind port 80.
+          # readOnlyRootFilesystem: false because nginx writes to /tmp and /var/cache/nginx
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: false    # nginx binds port 80 — requires root
+            readOnlyRootFilesystem: false
 ---
+# ── Frontend — NodePort Service ───────────────────────────────────────────────
+# NodePort is required by the AWS Load Balancer Controller when using
+# target-type: ip (ALB routes directly to pod IPs, not node ports).
+# The ALB health check hits /health on this service.
 apiVersion: v1
 kind: Service
 metadata:
@@ -53,11 +124,11 @@ metadata:
   labels:
     app: frontend
 spec:
-  type: ClusterIP
+  type: NodePort
   selector:
     app: frontend
   ports:
     - name: http
       port: {{ .Values.frontend.port }}
-      targetPort: {{ .Values.frontend.port }}
+      targetPort: http
       protocol: TCP

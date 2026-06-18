@@ -1,0 +1,226 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Core Service — Deployment
+#
+# Image: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/cargotrack-core:latest
+# Port:  4000
+# Health: GET /api/health → 200 OK
+#
+# Responsibilities:
+#   - Prisma migrations (runs on startup via entrypoint.sh)
+#   - Auth (JWT issue)
+#   - Shipments CRUD + tracking
+#   - Admin panel
+#   - Reports / notifications
+#   - Copilot proxy to ai-service
+#   - EventBridge publisher
+#   - SQS compliance queue publisher
+#
+# IRSA: Secrets Manager, EventBridge, SQS, S3, KMS
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: core-service
+  namespace: cargotrack
+  labels:
+    app.kubernetes.io/name: core-service
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/version: "latest"
+  annotations:
+    kubernetes.io/change-cause: "Initial EKS deployment"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: core-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: core-service
+        app.kubernetes.io/name: core-service
+        app.kubernetes.io/component: backend
+    spec:
+      serviceAccountName: core-service
+
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: core-service
+
+      # ── Init container: wait for database to be ready ────────────────────
+      # Prevents Prisma migrate from failing on cold-start when RDS is
+      # still completing its initial connection pool warmup.
+      initContainers:
+        - name: wait-for-db
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "Waiting for database..."
+              until nc -z "$DATABASE_HOST" "$DATABASE_PORT"; do
+                echo "DB not ready — sleeping 3s"
+                sleep 3
+              done
+              echo "Database reachable!"
+          env:
+            - name: DATABASE_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: DATABASE_HOST
+            - name: DATABASE_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: DATABASE_PORT
+
+      containers:
+        - name: core-service
+          image: "<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/cargotrack-core:latest"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 4000
+              protocol: TCP
+
+          # ── Environment variables ────────────────────────────────────────
+          env:
+            # Platform config
+            - name: NODE_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: cargotrack-config
+                  key: NODE_ENV
+            - name: PORT
+              value: "4000"
+            - name: AWS_DEFAULT_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: cargotrack-config
+                  key: AWS_DEFAULT_REGION
+
+            # Database credentials from Kubernetes Secret
+            - name: DATABASE_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: DATABASE_HOST
+            - name: DATABASE_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: DATABASE_PORT
+            - name: DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: DATABASE_NAME
+            - name: DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: DATABASE_USER
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: DATABASE_PASSWORD
+
+            # Application secrets
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: JWT_SECRET
+            - name: ADMIN_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: ADMIN_EMAIL
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: ADMIN_PASSWORD
+            - name: INTERNAL_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: INTERNAL_API_SECRET
+
+            # AWS resources from ConfigMap
+            - name: EVENT_BUS_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: cargotrack-config
+                  key: EVENT_BUS_NAME
+            - name: SQS_COMPLIANCE_QUEUE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: cargotrack-config
+                  key: SQS_COMPLIANCE_QUEUE_URL
+            - name: S3_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: cargotrack-config
+                  key: S3_BUCKET
+            - name: CORS_ORIGIN
+              valueFrom:
+                configMapKeyRef:
+                  name: cargotrack-config
+                  key: CORS_ORIGIN
+
+            # Internal service URL for copilot proxy
+            - name: AI_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: cargotrack-config
+                  key: AI_SERVICE_URL
+
+          # ── Resources ────────────────────────────────────────────────────
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+
+          # ── Liveness probe ───────────────────────────────────────────────
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 4000
+            initialDelaySeconds: 30     # wait for Prisma migrations
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+
+          # ── Readiness probe ──────────────────────────────────────────────
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 4000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+            successThreshold: 1
+
+          # ── Security context ─────────────────────────────────────────────
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+
+      terminationGracePeriodSeconds: 60  # allow in-flight requests to complete

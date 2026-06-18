@@ -1,4 +1,6 @@
 ---
+# ── Document Service ServiceAccount — IRSA annotated ─────────────────────────
+# IRSA grants: S3 read/write, Textract, KMS decrypt
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -9,7 +11,15 @@ metadata:
   labels:
     app: document-service
     {{- include "cargotrack.labels" . | nindent 4 }}
+automountServiceAccountToken: true
 ---
+# ── Document Service Deployment ───────────────────────────────────────────────
+# Responsibilities:
+#   - Upload documents to S3
+#   - Download / list documents from S3
+#   - Optional Textract document analysis (TEXTRACT_ENABLED=true)
+#   - JWT token verification (token issued by core-service)
+# NO Prisma migrations — core-service owns the schema
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -18,58 +28,108 @@ metadata:
   labels:
     app: document-service
     {{- include "cargotrack.labels" . | nindent 4 }}
+  annotations:
+    kubernetes.io/change-cause: "Helm release {{ .Release.Revision }}"
 spec:
   replicas: {{ .Values.documentService.replicas }}
   selector:
     matchLabels:
       app: document-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0    # zero-downtime rolling update
   template:
     metadata:
       labels:
         app: document-service
     spec:
       serviceAccountName: {{ .Values.documentService.serviceAccount.name }}
+      terminationGracePeriodSeconds: 30   # allow in-flight S3/Textract calls to finish
+
+      # ── Spread pods across availability zones ─────────────────────────────
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: document-service
+
+      # ── Pod-level security context ─────────────────────────────────────────
+      securityContext:
+        fsGroup: 1000
+
       containers:
         - name: document-service
           image: {{ .Values.image.registry }}/{{ .Values.documentService.image }}:{{ .Values.documentService.tag }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
-            - containerPort: {{ .Values.documentService.port }}
+            - name: http
+              containerPort: {{ .Values.documentService.port }}
+              protocol: TCP
+
+          # ── Non-sensitive config (AWS resource identifiers) ───────────────
           envFrom:
             - configMapRef:
                 name: cargotrack-aws-config
+
           env:
             - name: NODE_ENV
               value: {{ .Values.documentService.env.NODE_ENV | quote }}
             - name: PORT
               value: {{ .Values.documentService.port | quote }}
+
+            # DB credentials (document-service reads shipment data for associations)
             - name: DATABASE_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: cargotrack-secrets
                   key: DATABASE_PASSWORD
+
+            # JWT secret to verify tokens issued by core-service
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:
                   name: cargotrack-secrets
                   key: JWT_SECRET
+
+          # ── Resource management ───────────────────────────────────────────
           resources:
             {{- toYaml .Values.documentService.resources | nindent 12 }}
+
+          # ── Readiness probe ───────────────────────────────────────────────
           readinessProbe:
             httpGet:
               path: /api/health
-              port: {{ .Values.documentService.port }}
+              port: http
             initialDelaySeconds: 15
             periodSeconds: 10
+            timeoutSeconds: 5
             failureThreshold: 3
+            successThreshold: 1
+
+          # ── Liveness probe ────────────────────────────────────────────────
           livenessProbe:
             httpGet:
               path: /api/health
-              port: {{ .Values.documentService.port }}
+              port: http
             initialDelaySeconds: 30
             periodSeconds: 30
+            timeoutSeconds: 5
             failureThreshold: 3
+            successThreshold: 1
+
+          # ── Container-level security context ──────────────────────────────
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
 ---
+# ── Document Service — ClusterIP Service ─────────────────────────────────────
+# Internal only. Accessed by frontend nginx proxy (/api/documents/*) via
+# ALB path-based routing direct to this service.
 apiVersion: v1
 kind: Service
 metadata:
@@ -84,5 +144,5 @@ spec:
   ports:
     - name: http
       port: {{ .Values.documentService.port }}
-      targetPort: {{ .Values.documentService.port }}
+      targetPort: http
       protocol: TCP

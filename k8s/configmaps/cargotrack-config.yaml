@@ -1,0 +1,74 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# CargoTrack ConfigMap — Platform-wide non-secret configuration
+#
+# USAGE: All values sourced from Terraform outputs after `terraform apply`.
+#        Run scripts/generate-k8s-config.sh to populate this file automatically.
+#
+# SECRETS: Never put secrets here. All credentials come from:
+#   - AWS Secrets Manager (via IRSA + SDK)
+#   - Kubernetes Secret (secrets/db-credentials.yaml + secrets/app-secrets.yaml)
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cargotrack-config
+  namespace: cargotrack
+  labels:
+    app.kubernetes.io/name: cargotrack
+    app.kubernetes.io/component: config
+data:
+  # ── AWS region ───────────────────────────────────────────────────────────
+  AWS_DEFAULT_REGION: "us-east-1"
+
+  # ── Node environment ─────────────────────────────────────────────────────
+  NODE_ENV: "production"
+
+  # ── Database connection (non-sensitive parts) ────────────────────────────
+  # DATABASE_HOST and DATABASE_PORT come from SSM Parameter Store at runtime.
+  # The entrypoint.sh of each service reads DATABASE_HOST/PORT env vars and
+  # constructs DATABASE_URL automatically.
+  DATABASE_NAME: "cargotrack"
+  DATABASE_PORT: "5432"
+
+  # ── S3 bucket name ────────────────────────────────────────────────────────
+  # Replace <BUCKET_NAME> with output: terraform output -raw s3_bucket_name
+  S3_BUCKET: "<BUCKET_NAME>"
+
+  # ── DynamoDB audit table name ─────────────────────────────────────────────
+  # Replace with output: terraform output -raw dynamodb_audit_table
+  DYNAMO_AUDIT_TABLE: "<DYNAMO_AUDIT_TABLE>"
+
+  # ── EventBridge custom bus name ───────────────────────────────────────────
+  # Replace with output: terraform output -raw event_bus_name
+  EVENT_BUS_NAME: "<EVENT_BUS_NAME>"
+
+  # ── SQS compliance queue URL ──────────────────────────────────────────────
+  # Replace with output: terraform output -raw compliance_queue_url
+  SQS_COMPLIANCE_QUEUE_URL: "<SQS_COMPLIANCE_QUEUE_URL>"
+
+  # ── AI / Bedrock settings ─────────────────────────────────────────────────
+  LLM_PROVIDER: "bedrock"
+  BEDROCK_MODEL_ID: "amazon.nova-lite-v1:0"
+  TEXTRACT_ENABLED: "true"
+  MOCK_AGENT: "false"
+
+  # ── Service-to-service URLs (Kubernetes DNS) ─────────────────────────────
+  CORE_SERVICE_URL: "http://core-service.cargotrack.svc.cluster.local:4000"
+  AI_SERVICE_URL: "http://ai-service.cargotrack.svc.cluster.local:4002"
+  DOCUMENT_SERVICE_URL: "http://document-service.cargotrack.svc.cluster.local:4001"
+
+  # ── nginx Frontend proxy targets (for envsubst in frontend container) ────
+  # These match the Kubernetes Service DNS names within the cluster.
+  # The entrypoint injects these at runtime via envsubst.
+  FRONTEND_CORE_SERVICE_URL: "http://core-service.cargotrack.svc.cluster.local:4000"
+  FRONTEND_DOCUMENT_SERVICE_URL: "http://document-service.cargotrack.svc.cluster.local:4001"
+
+  # ── CORS ─────────────────────────────────────────────────────────────────
+  # Replace <CLOUDFRONT_DOMAIN> with: terraform output -raw cloudfront_domain_name
+  CORS_ORIGIN: "https://<CLOUDFRONT_DOMAIN>"
+
+  # ── Service ports ────────────────────────────────────────────────────────
+  PORT_FRONTEND: "80"
+  PORT_CORE: "4000"
+  PORT_AI: "4002"
+  PORT_DOCUMENT: "4001"

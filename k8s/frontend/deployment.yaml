@@ -1,0 +1,119 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Frontend — Deployment
+#
+# Image: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/cargotrack-frontend:latest
+# Replace <ACCOUNT_ID> with: terraform output -raw ecr_registry_id
+#
+# Port: 80 (nginx)
+# Health: GET /health → 200 OK (defined in nginx.conf)
+#
+# env injection:
+#   CORE_SERVICE_URL     → nginx.conf.template envsubst → proxy_pass core-service
+#   DOCUMENT_SERVICE_URL → nginx.conf.template envsubst → proxy_pass document-service
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: cargotrack
+  labels:
+    app.kubernetes.io/name: frontend
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/version: "latest"
+  annotations:
+    kubernetes.io/change-cause: "Initial EKS deployment"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0       # zero-downtime rolling update
+  template:
+    metadata:
+      labels:
+        app: frontend
+        app.kubernetes.io/name: frontend
+        app.kubernetes.io/component: frontend
+    spec:
+      serviceAccountName: frontend
+
+      # Prefer to spread pods across availability zones
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: frontend
+
+      containers:
+        - name: frontend
+          # ── Replace <ACCOUNT_ID> with terraform output -raw ecr_registry_id
+          image: "<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/cargotrack-frontend:latest"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+
+          # ── Environment variables ────────────────────────────────────────
+          # nginx.conf is a template; envsubst substitutes these at container start.
+          env:
+            - name: CORE_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: cargotrack-config
+                  key: FRONTEND_CORE_SERVICE_URL
+            - name: DOCUMENT_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: cargotrack-config
+                  key: FRONTEND_DOCUMENT_SERVICE_URL
+
+          # ── Resource limits (nginx is lightweight) ───────────────────────
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+
+          # ── Liveness probe — nginx process health ────────────────────────
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+            successThreshold: 1
+
+          # ── Readiness probe — nginx ready to serve traffic ───────────────
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+            successThreshold: 1
+
+          # ── Security context ─────────────────────────────────────────────
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false  # nginx writes to /tmp and /var/cache
+            runAsNonRoot: false            # nginx needs root to bind port 80
+
+      # ── Pod security ──────────────────────────────────────────────────────
+      securityContext:
+        fsGroup: 101  # nginx group
+
+      # ── Graceful shutdown ─────────────────────────────────────────────────
+      terminationGracePeriodSeconds: 30

@@ -1,8 +1,18 @@
 {{- if .Values.ingress.enabled }}
 ---
-# Single Ingress with path-based routing to all 3 backend services and frontend
-# AWS Load Balancer Controller reads the alb.ingress.kubernetes.io/* annotations
-# and provisions an internet-facing ALB automatically.
+# ── CargoTrack Ingress — AWS ALB ──────────────────────────────────────────────
+# Controller: AWS Load Balancer Controller (NOT NGINX, NOT KGateway)
+#
+# Path-based ALB routing (direct to services — bypasses nginx for API calls):
+#   /api/documents/* → document-service:4001  (must be first — Prefix match order)
+#   /api/*           → core-service:4000
+#   /                → frontend:80            (catch-all: React SPA + nginx)
+#
+# Traffic flow:
+#   Internet → CloudFront → ALB (internet-facing) → services
+#
+# ALB DNS appears under: kubectl get ingress -n cargotrack
+# Wire CloudFront origin to ALB DNS after first apply.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -18,7 +28,7 @@ spec:
   rules:
     - http:
         paths:
-          # Document service — must come before /api/* to avoid swallowing
+          # Document service — must be listed BEFORE /api to take priority
           - path: /api/documents
             pathType: Prefix
             backend:
@@ -26,6 +36,7 @@ spec:
                 name: document-service
                 port:
                   number: {{ .Values.documentService.port }}
+
           # Core service — all other /api/* routes
           - path: /api
             pathType: Prefix
@@ -34,7 +45,8 @@ spec:
                 name: core-service
                 port:
                   number: {{ .Values.coreService.port }}
-          # Frontend — catch-all
+
+          # Frontend — catch-all (React SPA + nginx healthcheck)
           - path: /
             pathType: Prefix
             backend:

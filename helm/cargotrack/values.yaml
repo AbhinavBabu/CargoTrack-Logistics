@@ -1,43 +1,39 @@
 # CargoTrack v3 Helm Chart — Default Values
 # Override in values-dev.yaml or values-prod.yaml
 
-# Global settings
+# ── Global settings ───────────────────────────────────────────────────────────
 global:
   environment: dev
   region: us-east-1
   namespace: cargotrack
 
-# Docker Hub registry (no ECR for now)
+# ── Image registry ────────────────────────────────────────────────────────────
+# ECR registry URL format: <account_id>.dkr.ecr.<region>.amazonaws.com
+# Injected by scripts/post-apply-setup.sh from: terraform output ecr_registry_id
+# Override in values-dev.yaml / values-prod.yaml
 image:
-  registry: abhinavbabu33
+  registry: ""          # INJECT: <account>.dkr.ecr.us-east-1.amazonaws.com
   pullPolicy: Always
 
-# ── Core Service ─────────────────────────────────────────────────────────────
+# ── Core Service ──────────────────────────────────────────────────────────────
 coreService:
   image: cargotrack-core
   tag: latest
   replicas: 2
   port: 4000
-  nodePort: ""
   resources:
     requests:
-      cpu: "100m"
+      cpu: "250m"
       memory: "256Mi"
     limits:
-      cpu: "500m"
+      cpu: "1000m"
       memory: "512Mi"
   serviceAccount:
     name: core-service
-    roleArn: ""       # Injected in values-dev.yaml from terraform output
+    roleArn: ""       # INJECT: terraform output irsa_core_service_role_arn
   env:
     NODE_ENV: production
     PORT: "4000"
-  ingress:
-    enabled: true
-    pathPrefix: "/api"
-    # document paths handled by document-service
-    excludePaths:
-      - "/api/documents"
 
 # ── Document Service ──────────────────────────────────────────────────────────
 documentService:
@@ -47,39 +43,41 @@ documentService:
   port: 4001
   resources:
     requests:
-      cpu: "100m"
+      cpu: "200m"
       memory: "256Mi"
     limits:
-      cpu: "500m"
+      cpu: "1000m"
       memory: "512Mi"
   serviceAccount:
     name: document-service
-    roleArn: ""       # Injected in values-dev.yaml
+    roleArn: ""       # INJECT: terraform output irsa_document_service_role_arn
   env:
     NODE_ENV: production
     PORT: "4001"
 
 # ── AI Service ────────────────────────────────────────────────────────────────
+# replicas: 2 — SQS handles duplicate delivery via visibility timeout.
+# Use minReplicas: 1 in values-prod.yaml if strict singleton is required.
 aiService:
   image: cargotrack-ai
   tag: latest
-  replicas: 1          # 1 replica — singleton SQS consumer
+  replicas: 2
   port: 4002
   resources:
     requests:
-      cpu: "100m"
-      memory: "256Mi"
+      cpu: "500m"
+      memory: "512Mi"
     limits:
-      cpu: "1000m"
+      cpu: "2000m"
       memory: "1Gi"
   serviceAccount:
     name: ai-service
-    roleArn: ""       # Injected in values-dev.yaml
+    roleArn: ""       # INJECT: terraform output irsa_ai_service_role_arn
   env:
     NODE_ENV: production
     PORT: "4002"
-    MOCK_AGENT: "true"   # Override to "false" when Bedrock access available
-    TEXTRACT_ENABLED: "false"
+    MOCK_AGENT: "true"          # Override to "false" when Bedrock is available
+    TEXTRACT_ENABLED: "false"   # Override to "true" with real Textract access
 
 # ── Frontend ──────────────────────────────────────────────────────────────────
 frontend:
@@ -89,13 +87,11 @@ frontend:
   port: 80
   resources:
     requests:
-      cpu: "50m"
+      cpu: "100m"
       memory: "128Mi"
     limits:
-      cpu: "200m"
+      cpu: "500m"
       memory: "256Mi"
-  env:
-    VITE_API_URL: ""    # Empty = same origin (proxied through Ingress)
 
 # ── Ingress (AWS Load Balancer Controller) ────────────────────────────────────
 ingress:
@@ -107,10 +103,39 @@ ingress:
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
     alb.ingress.kubernetes.io/group.name: cargotrack
-  # ALB DNS will appear in: kubectl get ingress -n cargotrack
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "15"
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "5"
+    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: "3"
+
+# ── Horizontal Pod Autoscaling ────────────────────────────────────────────────
+# Requires metrics-server installed on the cluster.
+# Install: kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+hpa:
+  enabled: true
+  coreService:
+    minReplicas: 2
+    maxReplicas: 10
+    cpuTargetPercent: 70
+  documentService:
+    minReplicas: 2
+    maxReplicas: 10
+    cpuTargetPercent: 70
+  aiService:
+    # minReplicas: 2 by default. Set to 1 in values-prod.yaml if strict
+    # singleton SQS consumption is required for your use case.
+    minReplicas: 2
+    maxReplicas: 10
+    cpuTargetPercent: 70
+    scaleInStabilizationSeconds: 600   # 10-min cooldown — preserves SQS polling continuity
+  frontend:
+    minReplicas: 2
+    maxReplicas: 10
+    cpuTargetPercent: 70
 
 # ── AWS resource connections ──────────────────────────────────────────────────
-# These are injected from terraform output into values-dev.yaml
+# Injected by scripts/post-apply-setup.sh from terraform output
 aws:
   region: us-east-1
   rdsEndpoint: ""

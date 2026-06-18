@@ -1,0 +1,158 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Document Service — Deployment
+#
+# Port:  4001
+# Health: GET /api/health → 200 OK
+#
+# Responsibilities:
+#   - Upload documents to S3
+#   - Download and list documents from S3
+#   - Optional Textract document analysis (TEXTRACT_ENABLED=true)
+#   - JWT token verification (from core-service)
+#   - EventBridge publisher for document events
+#
+# IRSA: S3 read/write, Textract, KMS decrypt
+# NO Prisma migrations — core-service owns schema
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: document-service
+  namespace: cargotrack
+  labels:
+    app.kubernetes.io/name: document-service
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/version: "latest"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: document-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: document-service
+        app.kubernetes.io/name: document-service
+        app.kubernetes.io/component: backend
+    spec:
+      serviceAccountName: document-service
+
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: document-service
+
+      containers:
+        - name: document-service
+          image: "<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/cargotrack-docs:latest"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 4001
+              protocol: TCP
+
+          env:
+            - name: NODE_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: cargotrack-config
+                  key: NODE_ENV
+            - name: PORT
+              value: "4001"
+            - name: AWS_DEFAULT_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: cargotrack-config
+                  key: AWS_DEFAULT_REGION
+
+            # Database credentials
+            - name: DATABASE_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: DATABASE_HOST
+            - name: DATABASE_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: DATABASE_PORT
+            - name: DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: DATABASE_NAME
+            - name: DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: DATABASE_USER
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: DATABASE_PASSWORD
+
+            # JWT secret for verifying tokens from core-service
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: JWT_SECRET
+
+            # AWS resources
+            - name: S3_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: cargotrack-config
+                  key: S3_BUCKET
+            - name: TEXTRACT_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: cargotrack-config
+                  key: TEXTRACT_ENABLED
+            - name: CORS_ORIGIN
+              valueFrom:
+                configMapKeyRef:
+                  name: cargotrack-config
+                  key: CORS_ORIGIN
+
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 4001
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 4001
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+
+      terminationGracePeriodSeconds: 30

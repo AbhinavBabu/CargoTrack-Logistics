@@ -1,0 +1,109 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# CargoTrack — AWS ALB Ingress
+#
+# Controller: AWS Load Balancer Controller (aws-load-balancer-controller)
+# NOT NGINX. NOT KGateway. NOT Istio.
+#
+# Traffic flow:
+#   Internet → CloudFront → ALB (internet-facing) → nginx frontend pod
+#              ALB also directly routes /api/* to backend services
+#
+# Architecture:
+#   CloudFront → ALB (port 80) → frontend:80  (all routes)
+#               The frontend nginx then internally proxies:
+#                 /api/documents/* → document-service:4001
+#                 /api/*           → core-service:4000
+#
+# This single-ingress approach routes all traffic through the frontend nginx,
+# which acts as an API gateway. This matches the Docker Compose architecture
+# exactly and requires no changes to the application code.
+#
+# ALB Annotations Reference:
+#   https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/guide/ingress/annotations/
+#
+# REPLACEMENTS NEEDED:
+#   <VPC_ID>            → terraform output: look up from AWS console or state
+#   <ACM_CERT_ARN>      → terraform output -raw acm_certificate_arn (if domain set)
+#   <WAF_ACL_ARN>       → terraform output -raw waf_web_acl_arn (optional, for ALB WAF)
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cargotrack-ingress
+  namespace: cargotrack
+  labels:
+    app.kubernetes.io/name: cargotrack
+    app.kubernetes.io/component: ingress
+  annotations:
+    # ── ALB Controller annotations ──────────────────────────────────────────
+
+    # Use AWS ALB (not NLB)
+    kubernetes.io/ingress.class: alb
+
+    # Internet-facing ALB (accessible from CloudFront and public internet)
+    alb.ingress.kubernetes.io/scheme: internet-facing
+
+    # Route traffic directly to pod IPs (requires VPC CNI with IP-mode)
+    # This is more efficient than node-port mode
+    alb.ingress.kubernetes.io/target-type: ip
+
+    # HTTP listener on port 80 (CloudFront → ALB is HTTP; CF handles HTTPS)
+    # When a domain and ACM cert are available, add HTTPS listener (see below)
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+
+    # ── OPTIONAL: HTTPS with ACM certificate ────────────────────────────────
+    # Uncomment and replace <ACM_CERT_ARN> when domain_name is configured:
+    # alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    # alb.ingress.kubernetes.io/certificate-arn: "<ACM_CERT_ARN>"
+    # alb.ingress.kubernetes.io/ssl-redirect: "443"
+    # alb.ingress.kubernetes.io/ssl-policy: "ELBSecurityPolicy-TLS13-1-2-2021-06"
+
+    # ── Health check settings ────────────────────────────────────────────────
+    # frontend nginx exposes /health on port 80 (defined in nginx.conf)
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "15"
+    alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "5"
+    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: "3"
+
+    # ── ALB attributes ───────────────────────────────────────────────────────
+    alb.ingress.kubernetes.io/load-balancer-attributes: |
+      routing.http2.enabled=true,
+      idle_timeout.timeout_seconds=60,
+      deletion_protection.enabled=false,
+      access_logs.s3.enabled=false
+
+    # ── Tags (appear in AWS console) ─────────────────────────────────────────
+    alb.ingress.kubernetes.io/tags: >-
+      Project=cargotrack,
+      ManagedBy=kubernetes,
+      Environment=production
+
+    # ── CloudFront compatibility ─────────────────────────────────────────────
+    # ALB is the CloudFront origin — forward the original host header
+    alb.ingress.kubernetes.io/backend-protocol: HTTP
+
+    # ── Security group ────────────────────────────────────────────────────────
+    # The ALB controller creates its own SG. To allow CloudFront origin IPs,
+    # you may restrict this to CloudFront managed prefix list:
+    # alb.ingress.kubernetes.io/inbound-cidrs: "0.0.0.0/0"  # open for now
+
+    # ── Wafv2 Regional (optional — only if attaching WAF to ALB, not just CF) ─
+    # alb.ingress.kubernetes.io/wafv2-acl-arn: "<WAF_ACL_ARN>"
+
+spec:
+  rules:
+    # ── Route ALL traffic to frontend nginx ───────────────────────────────────
+    # nginx.conf internally proxies:
+    #   /api/documents/*  → document-service:4001 (in-cluster)
+    #   /api/*            → core-service:4000 (in-cluster)
+    #   /                 → React SPA (static files)
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80

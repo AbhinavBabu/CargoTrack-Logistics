@@ -1,0 +1,187 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# AI Service — Deployment
+#
+# Port:  4002
+# Health: GET /api/health → 200 OK
+#
+# Responsibilities:
+#   - SQS compliance queue consumer (polling loop — non-HTTP, background)
+#   - Compliance analysis via Amazon Bedrock (Nova Lite / Pro)
+#   - Shipment Intelligence Copilot (7 capabilities)
+#   - Route Intelligence Briefing
+#   - AWS Textract document extraction
+#   - DynamoDB audit trail write
+#   - Knowledge Base: 5 JSON catalogs embedded in image
+#
+# IRSA: SQS, Bedrock, Textract, S3, DynamoDB, KMS
+# NO Prisma migrations — core-service owns schema
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-service
+  namespace: cargotrack
+  labels:
+    app.kubernetes.io/name: ai-service
+    app.kubernetes.io/component: ai
+    app.kubernetes.io/version: "latest"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ai-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: ai-service
+        app.kubernetes.io/name: ai-service
+        app.kubernetes.io/component: ai
+    spec:
+      serviceAccountName: ai-service
+
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: ai-service
+
+      containers:
+        - name: ai-service
+          image: "<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/cargotrack-ai:latest"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 4002
+              protocol: TCP
+
+          env:
+            - name: NODE_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: cargotrack-config
+                  key: NODE_ENV
+            - name: PORT
+              value: "4002"
+            - name: AWS_DEFAULT_REGION
+              valueFrom:
+                configMapKeyRef:
+                  name: cargotrack-config
+                  key: AWS_DEFAULT_REGION
+
+            # Database credentials (ai-service reads shipment data)
+            - name: DATABASE_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: DATABASE_HOST
+            - name: DATABASE_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: DATABASE_PORT
+            - name: DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: DATABASE_NAME
+            - name: DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: DATABASE_USER
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-credentials
+                  key: DATABASE_PASSWORD
+
+            # Service-to-service auth
+            - name: INTERNAL_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: INTERNAL_API_SECRET
+
+            # AWS resources
+            - name: SQS_COMPLIANCE_QUEUE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: cargotrack-config
+                  key: SQS_COMPLIANCE_QUEUE_URL
+            - name: S3_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: cargotrack-config
+                  key: S3_BUCKET
+            - name: DYNAMO_AUDIT_TABLE
+              valueFrom:
+                configMapKeyRef:
+                  name: cargotrack-config
+                  key: DYNAMO_AUDIT_TABLE
+
+            # Bedrock / LLM settings
+            - name: LLM_PROVIDER
+              valueFrom:
+                configMapKeyRef:
+                  name: cargotrack-config
+                  key: LLM_PROVIDER
+            - name: BEDROCK_MODEL_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: cargotrack-config
+                  key: BEDROCK_MODEL_ID
+            - name: TEXTRACT_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: cargotrack-config
+                  key: TEXTRACT_ENABLED
+            - name: MOCK_AGENT
+              valueFrom:
+                configMapKeyRef:
+                  name: cargotrack-config
+                  key: MOCK_AGENT
+
+          # ── Resources ────────────────────────────────────────────────────
+          # Higher CPU/memory than other services because:
+          # - Runs concurrent Bedrock API calls
+          # - Loads 5 JSON knowledge base catalogs into memory
+          # - SQS polling is always running in background
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "1024Mi"
+
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 4002
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 4002
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+
+      terminationGracePeriodSeconds: 60  # allow in-flight Bedrock calls to complete

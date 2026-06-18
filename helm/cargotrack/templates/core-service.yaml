@@ -1,5 +1,6 @@
 ---
-# Core Service ServiceAccount — annotated with IRSA role ARN for AWS API access
+# ── Core Service ServiceAccount — IRSA annotated ─────────────────────────────
+# IRSA grants: S3, EventBridge, SQS, Secrets Manager, KMS
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -10,7 +11,14 @@ metadata:
   labels:
     app: core-service
     {{- include "cargotrack.labels" . | nindent 4 }}
+automountServiceAccountToken: true
 ---
+# ── Core Service Deployment ───────────────────────────────────────────────────
+# Responsibilities:
+#   - Auth (JWT issue), Shipments CRUD, Admin, Reports, Notifications
+#   - Copilot proxy to ai-service
+#   - Prisma migrations on startup (only service that runs migrations)
+#   - EventBridge publisher, SQS compliance trigger
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -19,33 +27,98 @@ metadata:
   labels:
     app: core-service
     {{- include "cargotrack.labels" . | nindent 4 }}
+  annotations:
+    kubernetes.io/change-cause: "Helm release {{ .Release.Revision }}"
 spec:
   replicas: {{ .Values.coreService.replicas }}
   selector:
     matchLabels:
       app: core-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0    # zero-downtime: always keep full replica count running
   template:
     metadata:
       labels:
         app: core-service
     spec:
       serviceAccountName: {{ .Values.coreService.serviceAccount.name }}
+      terminationGracePeriodSeconds: 60   # allow in-flight requests to drain
+
+      # ── Spread pods across availability zones ─────────────────────────────
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: core-service
+
+      # ── Pod-level security context ─────────────────────────────────────────
+      securityContext:
+        fsGroup: 1000
+
+      # ── Init container: wait for RDS to accept connections ─────────────────
+      # Prevents Prisma migrate from failing during RDS cold-start.
+      # DATABASE_HOST and DATABASE_PORT come from the cargotrack-aws-config ConfigMap.
+      initContainers:
+        - name: wait-for-db
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "[init] Waiting for database at ${DATABASE_HOST}:${DATABASE_PORT}..."
+              until nc -z "$DATABASE_HOST" "$DATABASE_PORT"; do
+                echo "[init] DB not ready — retrying in 3s"
+                sleep 3
+              done
+              echo "[init] Database is reachable — starting core-service"
+          env:
+            - name: DATABASE_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: cargotrack-aws-config
+                  key: DATABASE_HOST
+            - name: DATABASE_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: cargotrack-aws-config
+                  key: DATABASE_PORT
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+
       containers:
         - name: core-service
           image: {{ .Values.image.registry }}/{{ .Values.coreService.image }}:{{ .Values.coreService.tag }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
-            - containerPort: {{ .Values.coreService.port }}
+            - name: http
+              containerPort: {{ .Values.coreService.port }}
+              protocol: TCP
+
+          # ── Environment variables ─────────────────────────────────────────
+          # Non-sensitive config from ConfigMap (AWS resource identifiers)
           envFrom:
             - configMapRef:
                 name: cargotrack-aws-config
+
           env:
             - name: NODE_ENV
               value: {{ .Values.coreService.env.NODE_ENV | quote }}
             - name: PORT
               value: {{ .Values.coreService.port | quote }}
+
+            # Internal service URL for copilot proxy
             - name: AI_SERVICE_URL
               value: "http://ai-service:{{ .Values.aiService.port }}"
+
+            # Sensitive credentials from Kubernetes Secret
+            # (created by scripts/post-apply-setup.sh from AWS Secrets Manager)
             - name: DATABASE_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -61,23 +134,42 @@ spec:
                 secretKeyRef:
                   name: cargotrack-secrets
                   key: ADMIN_PASSWORD
+
+          # ── Resource management ───────────────────────────────────────────
           resources:
             {{- toYaml .Values.coreService.resources | nindent 12 }}
+
+          # ── Readiness probe ───────────────────────────────────────────────
+          # Delayed to allow Prisma migrations to complete before traffic arrives
           readinessProbe:
             httpGet:
               path: /api/health
-              port: {{ .Values.coreService.port }}
-            initialDelaySeconds: 15
+              port: http
+            initialDelaySeconds: 20
             periodSeconds: 10
+            timeoutSeconds: 5
             failureThreshold: 3
+            successThreshold: 1
+
+          # ── Liveness probe ────────────────────────────────────────────────
           livenessProbe:
             httpGet:
               path: /api/health
-              port: {{ .Values.coreService.port }}
-            initialDelaySeconds: 30
+              port: http
+            initialDelaySeconds: 40
             periodSeconds: 30
+            timeoutSeconds: 5
             failureThreshold: 3
+            successThreshold: 1
+
+          # ── Container-level security context ──────────────────────────────
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
 ---
+# ── Core Service — ClusterIP Service ─────────────────────────────────────────
+# Internal only. Accessed by frontend nginx proxy (/api/*).
 apiVersion: v1
 kind: Service
 metadata:
@@ -92,5 +184,5 @@ spec:
   ports:
     - name: http
       port: {{ .Values.coreService.port }}
-      targetPort: {{ .Values.coreService.port }}
+      targetPort: http
       protocol: TCP

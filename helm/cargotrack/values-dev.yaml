@@ -1,10 +1,9 @@
 # CargoTrack Dev Environment Overrides
-# IMPORTANT: After terraform apply, run the inject-values script to populate
-# the roleArn and aws.* fields from terraform output.
-#
-# Quick inject command (run from cargotrack-infra/environments/dev/):
-#   terraform output -json | jq -r '...' > ../../../../helm/cargotrack/values-dev.yaml
-# See docs/post-apply-setup.md for the full command.
+# ─────────────────────────────────────────────────────────────────────────────
+# After terraform apply, run:
+#   bash scripts/post-apply-setup.sh
+# That script auto-populates every "INJECT:" field below from terraform output.
+# ─────────────────────────────────────────────────────────────────────────────
 
 global:
   environment: dev
@@ -12,42 +11,46 @@ global:
   namespace: cargotrack
 
 image:
+  # ECR registry: <account_id>.dkr.ecr.us-east-1.amazonaws.com
+  # INJECT: terraform output ecr_registry_id → "<id>.dkr.ecr.us-east-1.amazonaws.com"
+  registry: ""         # INJECT by post-apply-setup.sh
   pullPolicy: Always
 
-# IRSA role ARNs — populated by inject-values script after terraform apply
-# DO NOT commit real ARNs — these are injected by CI/CD from terraform output
+# ── IRSA role ARNs — populated by post-apply-setup.sh ───────────────────────
 coreService:
   tag: latest
   serviceAccount:
-    roleArn: ""  # INJECT: terraform output irsa_core_service_role_arn
+    roleArn: ""        # INJECT: terraform output irsa_core_service_role_arn
 
 documentService:
   tag: latest
   serviceAccount:
-    roleArn: ""  # INJECT: terraform output irsa_document_service_role_arn
+    roleArn: ""        # INJECT: terraform output irsa_document_service_role_arn
 
-# AI service: single block — env overrides + IRSA role ARN + image tag
-# MOCK_AGENT=true until Bedrock access is granted. Change to "false" then git push.
 aiService:
   tag: latest
   serviceAccount:
-    roleArn: ""  # INJECT: terraform output irsa_ai_service_role_arn
+    roleArn: ""        # INJECT: terraform output irsa_ai_service_role_arn
   env:
-    MOCK_AGENT: "true"
-    TEXTRACT_ENABLED: "false"
+    MOCK_AGENT: "true"          # Set to "false" when Bedrock access is confirmed
+    TEXTRACT_ENABLED: "false"   # Set to "true" when Textract permissions verified
 
 frontend:
   tag: latest
 
-# AWS resource connections — populated by inject-values script
+# ── HPA — dev: enabled with default CPU targets ───────────────────────────────
+hpa:
+  enabled: true
+
+# ── AWS resource connections — populated by post-apply-setup.sh ───────────────
 aws:
   region: us-east-1
-  rdsEndpoint: ""      # INJECT: terraform output rds_endpoint
+  rdsEndpoint: ""         # INJECT: terraform output rds_endpoint
   rdsDatabase: cargotrack
   rdsUsername: cargotrack
-  s3BucketName: ""     # INJECT: terraform output s3_bucket_name
-  eventBusName: ""     # INJECT: terraform output event_bus_name
-  complianceQueueUrl: "" # INJECT: terraform output compliance_queue_url
-  auditTableName: ""   # INJECT: terraform output dynamodb_audit_table
-  dbSecretArn: ""      # INJECT: from terraform output (sensitive)
-  appSecretArn: ""     # INJECT: from terraform output (sensitive)
+  s3BucketName: ""        # INJECT: terraform output s3_bucket_name
+  eventBusName: ""        # INJECT: terraform output event_bus_name
+  complianceQueueUrl: ""  # INJECT: terraform output compliance_queue_url
+  auditTableName: ""      # INJECT: terraform output dynamodb_audit_table
+  dbSecretArn: ""         # INJECT: terraform output db_secret_arn
+  appSecretArn: ""        # INJECT: terraform output application_secret_arn
