@@ -13,7 +13,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/AbhinavBabu/cargotrack-v2.git
-    targetRevision: cargotrack-v3-microservices
+    targetRevision: cargotrack-terraform-v2
     path: helm/cargotrack
     helm:
       valueFiles:
