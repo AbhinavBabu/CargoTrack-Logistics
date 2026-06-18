@@ -165,8 +165,9 @@ output "platform_note" {
          kubectl get svc argocd-server -n argocd \
            -o jsonpath="{.status.loadBalancer.ingress[0].hostname}"
 
-    3. Apply ArgoCD App-of-Apps (GitOps bootstrap):
-         kubectl apply -f gitops/apps/root-app.yaml
+    3. Verify External Secrets sync (should show READY=True):
+         kubectl get externalsecret -n cargotrack
+         kubectl get secret cargotrack-secrets -n cargotrack
 
     4. Once ArgoCD syncs and the Ingress is created, get the ALB DNS name:
          kubectl get ingress -n cargotrack
@@ -176,4 +177,32 @@ output "platform_note" {
     ─────────────────────────────────────────────────────────────────────────
   EOT
 }
+
+# ── External Secrets Operator outputs ────────────────────────────────────────
+
+output "irsa_eso_role_arn" {
+  description = "IRSA role ARN for the External Secrets Operator (kube-system:external-secrets)"
+  value       = module.irsa.eso_role_arn
+}
+
+output "eso_secret_store_name" {
+  description = "ClusterSecretStore name created by Terraform — used in ExternalSecret .spec.secretStoreRef.name"
+  value       = "aws-secrets-manager"
+}
+
+output "eso_external_secret_name" {
+  description = "ExternalSecret name that creates the cargotrack-secrets Kubernetes Secret"
+  value       = "cargotrack-secrets"
+}
+
+output "eso_secret_key_mapping" {
+  description = <<-EOT
+    Key mapping from Secrets Manager into the cargotrack-secrets Kubernetes Secret:
+      DATABASE_PASSWORD <- cargotrack-database-secret  .password
+      JWT_SECRET        <- cargotrack-application-secret .jwt_secret
+      ADMIN_PASSWORD    <- cargotrack-application-secret .admin_password
+  EOT
+  value       = "See description — verify with: kubectl get secret cargotrack-secrets -n cargotrack -o jsonpath='{.data}' | base64 -d"
+}
+
 

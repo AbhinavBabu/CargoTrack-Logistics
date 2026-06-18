@@ -480,3 +480,57 @@ resource "aws_iam_role_policy" "cluster_autoscaler" {
   role   = aws_iam_role.cluster_autoscaler.id
   policy = data.aws_iam_policy_document.cluster_autoscaler.json
 }
+
+# ─── External Secrets Operator IRSA ──────────────────────────────────────────
+# ESO runs in kube-system under the service account "external-secrets".
+# It reads both Secrets Manager secrets and injects them into the
+# cargotrack-secrets Kubernetes Secret via ExternalSecret CRs.
+
+data "aws_iam_policy_document" "eso_assume" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+    effect  = "Allow"
+    principals {
+      type        = "Federated"
+      identifiers = [var.oidc_provider_arn]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "${local.oidc_host}:sub"
+      values   = ["system:serviceaccount:kube-system:external-secrets"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "${local.oidc_host}:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "eso" {
+  name               = "${var.project_name}-irsa-external-secrets"
+  assume_role_policy = data.aws_iam_policy_document.eso_assume.json
+  tags               = merge(local.common_tags, { Service = "external-secrets-operator" })
+}
+
+data "aws_iam_policy_document" "eso" {
+  # ESO only needs to read the two CargoTrack secrets — nothing else
+  statement {
+    sid       = "SecretsManagerRead"
+    actions   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
+    resources = [var.db_secret_arn, var.app_secret_arn]
+  }
+
+  # KMS decrypt is required because both secrets are encrypted with the CMK
+  statement {
+    sid       = "KMSDecrypt"
+    actions   = ["kms:Decrypt"]
+    resources = [var.kms_key_arn]
+  }
+}
+
+resource "aws_iam_role_policy" "eso" {
+  name   = "${var.project_name}-eso-policy"
+  role   = aws_iam_role.eso.id
+  policy = data.aws_iam_policy_document.eso.json
+}

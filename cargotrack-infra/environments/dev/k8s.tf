@@ -6,11 +6,15 @@
 #   2. AWS Load Balancer Controller  — kube-system  (needs nodes + IRSA)
 #   3. Metrics Server                — kube-system  (needed for HPA)
 #   4. Cluster Autoscaler            — kube-system  (least-waste expander)
-#   5. ArgoCD                        — argocd        (last — depends on LBC for NLB)
-#   6. ArgoCD App-of-Apps CR         — argocd        (eliminates manual kubectl apply)
+#   5. External Secrets Operator     — kube-system  (syncs Secrets Manager → K8s Secret)
+#   6. ClusterSecretStore            — cluster-wide (configures ESO backend)
+#   7. ExternalSecret                — cargotrack   (creates cargotrack-secrets)
+#   8. ArgoCD                        — argocd        (last — depends on LBC for NLB)
+#   9. ArgoCD App-of-Apps CR         — argocd        (eliminates manual kubectl apply)
 #
 # Destroy order is automatic: Terraform reverses the dependency graph.
-#   App-of-Apps CR → ArgoCD → Cluster Autoscaler → Metrics Server → LBC → namespaces
+#   App-of-Apps CR → ArgoCD → ExternalSecret → ClusterSecretStore → ESO
+#   → Cluster Autoscaler → Metrics Server → LBC → namespaces
 # This ensures all ArgoCD-managed Kubernetes resources (Ingress, pods) are
 # removed BEFORE the LBC is uninstalled, preventing orphaned ALBs and SGs.
 # =============================================================================
@@ -318,8 +322,174 @@ resource "kubernetes_manifest" "argocd_root_app" {
     }
   }
 
+  field_manager {
+    force_conflicts = true
+  }
+
   depends_on = [
     helm_release.argocd,
     kubernetes_namespace.argocd,
+  ]
+}
+
+# ── External Secrets Operator ─────────────────────────────────────────────────
+# ESO watches ExternalSecret CRs and syncs values from AWS Secrets Manager
+# into Kubernetes Secrets automatically. No manual kubectl secret creation.
+#
+# IRSA: The ESO service account (kube-system:external-secrets) is annotated
+# with the cargotrack-irsa-external-secrets IAM role, granting least-privilege
+# access to GetSecretValue on only the two CargoTrack secrets.
+#
+# Dependency chain:
+#   module.irsa (IAM role) → helm_release.eso (installs CRDs + controller)
+#   → kubernetes_manifest.cluster_secret_store (configures backend)
+#   → kubernetes_manifest.external_secret (creates cargotrack-secrets)
+#   → ArgoCD-managed pods (consume the Secret)
+
+resource "helm_release" "eso" {
+  name       = "external-secrets"
+  repository = "https://charts.external-secrets.io"
+  chart      = "external-secrets"
+  version    = "0.9.19" # pin — update deliberately
+  namespace  = "kube-system"
+
+  wait            = true
+  timeout         = 300
+  cleanup_on_fail = true
+
+  # Annotate the ESO service account with the IRSA role ARN.
+  # This is the only authentication ESO needs — no static AWS credentials.
+  set {
+    name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
+    value = module.irsa.eso_role_arn
+  }
+
+  # Fix the service account name to match the IRSA trust policy subject:
+  #   system:serviceaccount:kube-system:external-secrets
+  set {
+    name  = "serviceAccount.name"
+    value = "external-secrets"
+  }
+
+  depends_on = [
+    module.eks,
+    module.irsa,
+    helm_release.aws_load_balancer_controller,
+    kubernetes_namespace.cargotrack,
+  ]
+}
+
+# ── ClusterSecretStore ───────────────────────────────────────────────────────
+# Configures ESO to use AWS Secrets Manager in us-east-1.
+# Uses the IRSA credentials already injected into the ESO service account —
+# no static credentials or separate SecretStore secret needed.
+
+resource "kubernetes_manifest" "cluster_secret_store" {
+  manifest = {
+    apiVersion = "external-secrets.io/v1beta1"
+    kind       = "ClusterSecretStore"
+    metadata = {
+      name = "aws-secrets-manager"
+    }
+    spec = {
+      provider = {
+        aws = {
+          service = "SecretsManager"
+          region  = var.aws_region
+          auth = {
+            # jwt: use the IRSA token projected into the ESO pod.
+            # ESO automatically finds the IRSA token from the service account.
+            jwt = {
+              serviceAccountRef = {
+                name      = "external-secrets"
+                namespace = "kube-system"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  field_manager {
+    force_conflicts = true
+  }
+
+  depends_on = [
+    helm_release.eso,
+  ]
+}
+
+# ── ExternalSecret — cargotrack-secrets ───────────────────────────────────────
+# Creates and keeps in sync the Kubernetes Secret "cargotrack-secrets" in the
+# cargotrack namespace. ESO polls every hour (resyncPeriod) and re-syncs
+# whenever the Secrets Manager secret version changes.
+#
+# Keys mapped into cargotrack-secrets:
+#   From cargotrack-database-secret:    DATABASE_PASSWORD
+#   From cargotrack-application-secret: JWT_SECRET, ADMIN_PASSWORD
+#
+# These are the exact keys referenced by secretKeyRef in all three Helm templates:
+#   core-service:     DATABASE_PASSWORD, JWT_SECRET, ADMIN_PASSWORD
+#   ai-service:       DATABASE_PASSWORD
+#   document-service: DATABASE_PASSWORD, JWT_SECRET
+
+resource "kubernetes_manifest" "external_secret" {
+  manifest = {
+    apiVersion = "external-secrets.io/v1beta1"
+    kind       = "ExternalSecret"
+    metadata = {
+      name      = "cargotrack-secrets"
+      namespace = "cargotrack"
+    }
+    spec = {
+      refreshInterval = "1h"
+      secretStoreRef = {
+        name = "aws-secrets-manager"
+        kind = "ClusterSecretStore"
+      }
+      target = {
+        name           = "cargotrack-secrets"
+        creationPolicy = "Owner"
+        # When the ExternalSecret is deleted, the managed Secret is also deleted.
+        # This ensures terraform destroy leaves no orphaned Secrets.
+        deletionPolicy = "Delete"
+      }
+      data = [
+        {
+          # DATABASE_PASSWORD from the database secret
+          secretKey = "DATABASE_PASSWORD"
+          remoteRef = {
+            key      = "cargotrack-database-secret"
+            property = "password"
+          }
+        },
+        {
+          # JWT_SECRET from the application secret
+          secretKey = "JWT_SECRET"
+          remoteRef = {
+            key      = "cargotrack-application-secret"
+            property = "jwt_secret"
+          }
+        },
+        {
+          # ADMIN_PASSWORD from the application secret
+          secretKey = "ADMIN_PASSWORD"
+          remoteRef = {
+            key      = "cargotrack-application-secret"
+            property = "admin_password"
+          }
+        },
+      ]
+    }
+  }
+
+  field_manager {
+    force_conflicts = true
+  }
+
+  depends_on = [
+    kubernetes_manifest.cluster_secret_store,
+    kubernetes_namespace.cargotrack,
   ]
 }
