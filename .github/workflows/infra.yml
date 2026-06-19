@@ -41,15 +41,26 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Install tfsec directly so we control the output file path.
+      # The tfsec-action@v1.0.0 sends SARIF to stdout (not a file), which
+      # causes "Path does not exist: results.sarif" on the upload step.
+      - name: Install tfsec
+        run: |
+          curl -sL \
+            https://github.com/aquasecurity/tfsec/releases/latest/download/tfsec-linux-amd64 \
+            -o /usr/local/bin/tfsec
+          chmod +x /usr/local/bin/tfsec
+          tfsec --version
+
       - name: Run tfsec
-        uses: aquasecurity/tfsec-action@v1.0.0
-        with:
-          working_directory: cargotrack-infra
-          format: sarif
-          soft_fail: true          # Report findings but don't block plan/apply
-          additional_args: >
-            --exclude-downloaded-modules
-            --minimum-severity MEDIUM
+        run: |
+          tfsec cargotrack-infra \
+            --format sarif \
+            --soft-fail \
+            --exclude-downloaded-modules \
+            --minimum-severity MEDIUM \
+            --out results.sarif \
+            || true   # soft-fail: never block the pipeline, only report
 
       - name: Upload tfsec SARIF to GitHub Security
         if: always()
@@ -133,9 +144,12 @@ jobs:
     name: Terraform Apply
     runs-on: ubuntu-latest
     needs: [terraform-plan]
-    # Only run on push to the working branch (not PRs)
-    if: github.event_name == 'push'
-    # environment: production   # ← Uncomment to require manual approval before apply
+    # ── DISABLED: Apply is run locally with `terraform apply`, not from CI ──────
+    # Enabling auto-apply from CI risks infrastructure changes on every push.
+    # To enable: remove the `if: false` line and uncomment `environment: production`
+    # to add a required-reviewer approval gate before apply.
+    if: false
+    # environment: production
 
     steps:
       - name: Checkout code

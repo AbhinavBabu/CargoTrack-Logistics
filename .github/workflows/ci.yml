@@ -19,6 +19,8 @@ on:
     paths:
       - 'services/**'
       - 'frontend/**'
+  # Manual trigger — run from GitHub Actions tab without needing a dummy commit
+  workflow_dispatch:
 
 # ─── Permissions ───────────────────────────────────────────────────────────────
 # id-token: write  → OIDC authentication to AWS (no long-lived keys)
@@ -41,8 +43,8 @@ jobs:
   sonarqube:
     name: SonarQube SAST
     runs-on: ubuntu-latest
-    # Only run on push (not PR from forks, to protect secrets)
-    if: github.event_name == 'push'
+    # Run on push and manual dispatch; skip on PRs (secrets not available from forks)
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Checkout code
@@ -70,7 +72,7 @@ jobs:
   snyk-sca:
     name: Snyk Dependency Scan
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Checkout code
@@ -151,14 +153,15 @@ jobs:
       # Role ARN: arn:aws:iam::692828329130:role/cargotrack-github-actions-ecr-push
       # Trust: scoped to this exact GitHub repository and any branch.
       - name: Configure AWS credentials (OIDC)
-        if: github.event_name == 'push'
+        # Run on push or manual dispatch; skip on PRs (OIDC secrets unavailable in fork PRs)
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ECR_PUSH_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
 
       - name: Login to Amazon ECR
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
@@ -170,7 +173,7 @@ jobs:
       - name: Set image tag
         id: tag
         run: |
-          if [[ "${{ github.event_name }}" == "push" ]]; then
+          if [[ "${{ github.event_name }}" == "push" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             echo "tag=${{ github.sha }}" >> $GITHUB_OUTPUT
             echo "registry=${{ steps.ecr-login.outputs.registry }}" >> $GITHUB_OUTPUT
             echo "full_image=${{ steps.ecr-login.outputs.registry }}/${{ matrix.ecr_repo }}:${{ github.sha }}" >> $GITHUB_OUTPUT
@@ -215,13 +218,11 @@ jobs:
           sarif_file: trivy-${{ matrix.service }}.sarif
           category: trivy-${{ matrix.service }}
 
-      # ── Push image to ECR (push events only) ─────────────────────────────────
+      # ── Push image to ECR (push and manual dispatch only) ────────────────────
       - name: Push image to ECR
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
-          # Tag and push the locally-built image (already in Docker daemon from 'load: true')
           docker push ${{ steps.tag.outputs.full_image }}
-          # Also tag as :latest for human convenience
           docker tag ${{ steps.tag.outputs.full_image }} \
             ${{ steps.tag.outputs.registry }}/${{ matrix.ecr_repo }}:latest
           docker push ${{ steps.tag.outputs.registry }}/${{ matrix.ecr_repo }}:latest
@@ -235,8 +236,7 @@ jobs:
     name: Update Helm Tags → trigger ArgoCD
     runs-on: ubuntu-latest
     needs: [build-scan-push]
-    # Only run after a successful push (not PRs, not failed builds)
-    if: github.event_name == 'push' && success()
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && success()
 
     steps:
       - name: Checkout code
