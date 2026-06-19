@@ -197,22 +197,7 @@ output "cargotrack_secrets_note" {
   EOT
 }
 
-output "dns_name_servers" {
-  description = "NS records for shopp-novaa.co.in — configure these at your domain registrar"
-  value       = module.dns.zone_name_servers
-}
-
-output "cloudfront_domain_name" {
-  description = "CloudFront distribution domain (e.g. d32uubalg5ydcv.cloudfront.net)"
-  value       = module.cdn.cloudfront_domain_name
-}
-
 output "application_url" {
-  description = "Primary application URL after DNS delegation"
+  description = "Primary application URL — https after DNS delegation, http ALB URL otherwise"
   value       = var.domain_name != "" ? "https://${var.domain_name}" : "http://${var.eks_ingress_alb_dns}"
-}
-
-output "dns_enabled" {
-  description = "True when Route53/ACM/DNS are provisioned"
-  value       = module.dns.dns_enabled
 }
