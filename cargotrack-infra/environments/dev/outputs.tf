@@ -172,7 +172,12 @@ output "platform_note" {
          kubectl get ingress -n cargotrack
 
     5. Wire CloudFront to the ALB:
-         terraform apply -var="eks_ingress_alb_dns=<ALB_DNS>"
+         ALB DNS is now baked into variables.tf — no -var flag needed.
+         Just run: terraform apply
+
+    6. Domain is configured: shopp-novaa.co.in
+         After apply, copy the NS records from dns_name_servers output
+         to your registrar at shopp-novaa.co.in → change nameservers.
     ─────────────────────────────────────────────────────────────────────────
   EOT
 }
@@ -192,5 +197,22 @@ output "cargotrack_secrets_note" {
   EOT
 }
 
+output "dns_name_servers" {
+  description = "NS records for shopp-novaa.co.in — configure these at your domain registrar"
+  value       = module.dns.zone_name_servers
+}
 
+output "cloudfront_domain_name" {
+  description = "CloudFront distribution domain (e.g. d32uubalg5ydcv.cloudfront.net)"
+  value       = module.cdn.cloudfront_domain_name
+}
 
+output "application_url" {
+  description = "Primary application URL after DNS delegation"
+  value       = var.domain_name != "" ? "https://${var.domain_name}" : "http://${var.eks_ingress_alb_dns}"
+}
+
+output "dns_enabled" {
+  description = "True when Route53/ACM/DNS are provisioned"
+  value       = module.dns.dns_enabled
+}

@@ -132,6 +132,10 @@ resource "aws_cloudfront_distribution" "main" {
 
   web_acl_id = aws_wafv2_web_acl.main.arn
 
+  # When a custom domain + ACM cert is provided, register both apex and www
+  # as CloudFront aliases so CF accepts requests with those Host headers.
+  aliases = var.domain_aliases
+
   origin {
 
     origin_id   = "external-alb"
@@ -175,8 +179,17 @@ resource "aws_cloudfront_distribution" "main" {
     }
   }
 
+  # ── TLS Certificate ──────────────────────────────────────────────────────────
+  # When acm_certificate_arn is set (custom domain configured):
+  #   - Use the ACM cert so the domain is served over HTTPS with a valid cert
+  #   - minimum_protocol_version must be set when using a custom cert
+  # When empty (no domain configured):
+  #   - Use the free CloudFront default certificate (*.cloudfront.net)
   viewer_certificate {
-    cloudfront_default_certificate = true
+    acm_certificate_arn            = var.acm_certificate_arn != "" ? var.acm_certificate_arn : null
+    cloudfront_default_certificate = var.acm_certificate_arn == ""
+    ssl_support_method             = var.acm_certificate_arn != "" ? "sni-only" : null
+    minimum_protocol_version       = var.acm_certificate_arn != "" ? "TLSv1.2_2021" : null
   }
 
   tags = local.common_tags

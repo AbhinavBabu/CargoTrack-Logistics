@@ -56,26 +56,31 @@ variable "node_desired_size" {
 
 variable "eks_ingress_alb_dns" {
   description = <<-EOT
-    DNS name of the ALB created by the AWS Load Balancer Controller after Helm deploy.
-    Leave empty on first apply (before ArgoCD has deployed the ingress).
-    Update with: terraform apply -var="eks_ingress_alb_dns=<alb-dns>" after first deploy.
+    DNS name of the ALB created by the AWS Load Balancer Controller after Helm/ArgoCD deploys the Ingress.
+    This is baked in as the default after the first successful deploy so that future
+    terraform apply runs (including after terraform destroy + apply) have the correct origin.
+
+    To update after a new deploy:
+      kubectl get ingress -n cargotrack -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}'
+    Then update this default value.
   EOT
-  type        = string
-  default     = ""
+  type    = string
+  # ── Baked-in default: the ALB created by the first successful EKS + ArgoCD deploy ──
+  # Update this value if the ALB DNS changes (e.g. after terraform destroy + apply).
+  default = "k8s-cargotrack-faafefcd8d-1544623305.us-east-1.elb.amazonaws.com"
 }
 
 variable "domain_name" {
   description = <<-EOT
-    Custom domain name for the CargoTrack platform (e.g. cargotrack.example.com).
-    Leave as empty string "" to skip Route 53 hosted zone, ACM certificate, and DNS record creation.
-    Infrastructure provisions and validates cleanly without a domain.
+    Custom domain name for the CargoTrack platform.
+    Set to "" to skip Route 53, ACM, and custom CloudFront certificate.
+    When set, the dns module creates a hosted zone + ACM cert (us-east-1),
+    and the cdn module uses the cert for HTTPS with a proper TLS certificate.
 
-    When set, provides:
-      - Route 53 public hosted zone
-      - ACM certificate (us-east-1, for CloudFront)
-      - DNS validation records
-      - A-record alias pointing to CloudFront
+    After terraform apply, copy the NS records from the Terraform output
+    (dns_name_servers) to your domain registrar to complete DNS delegation.
   EOT
-  type        = string
-  default     = ""
+  type    = string
+  # ── Domain is now configured — enables Route53 + ACM + CloudFront HTTPS ──
+  default = "shopp-novaa.co.in"
 }

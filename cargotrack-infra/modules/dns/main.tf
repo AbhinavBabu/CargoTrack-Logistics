@@ -101,30 +101,11 @@ resource "aws_acm_certificate_validation" "main" {
   validation_record_fqdns = [for record in aws_route53_record.cert_validation : record.fqdn]
 }
 
-# ─── Route 53 A-record → CloudFront ─────────────────────────────────────────
-# Creates an apex alias record pointing to the CloudFront distribution.
-# Also creates www.<domain> CNAME if needed.
 
-resource "aws_route53_record" "cloudfront_apex" {
-  count = local.enabled ? 1 : 0
-
-  zone_id = aws_route53_zone.main[0].zone_id
-  name    = var.domain_name
-  type    = "A"
-
-  alias {
-    name                   = var.cloudfront_domain_name
-    zone_id                = "Z2FDTNDATAQYW2" # CloudFront hosted zone ID (constant across all accounts)
-    evaluate_target_health = false
-  }
-}
-
-resource "aws_route53_record" "cloudfront_www" {
-  count = local.enabled ? 1 : 0
-
-  zone_id = aws_route53_zone.main[0].zone_id
-  name    = "www.${var.domain_name}"
-  type    = "CNAME"
-  ttl     = 300
-  records = [var.cloudfront_domain_name]
-}
+# ─── Note on Route53 A-records ───────────────────────────────────────────────
+# The Route53 A-record and www CNAME pointing to CloudFront are intentionally
+# NOT in this module. They live in environments/dev/main.tf because:
+#   - module.cdn needs module.dns.certificate_arn (cdn depends on dns)
+#   - A-records need module.cdn.cloudfront_domain_name (records depend on cdn)
+#   - Putting both inside dns would create a cycle with cdn
+# At environment level, all outputs are available without a cycle.
