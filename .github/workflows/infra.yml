@@ -1,8 +1,6 @@
 name: Infra — Terraform Plan & Security Scan
 
 # ─── Triggers ──────────────────────────────────────────────────────────────────
-# Runs on any push or PR touching infrastructure code.
-# Terraform plan is always shown. Apply requires a manual approval.
 on:
   push:
     branches:
@@ -10,19 +8,24 @@ on:
       - main
     paths:
       - 'cargotrack-infra/**'
+      - '.github/workflows/infra.yml'   # re-run when this file itself changes
   pull_request:
     branches:
       - cargotrack-terraform-v2
       - main
     paths:
       - 'cargotrack-infra/**'
+  # ── Manual trigger ────────────────────────────────────────────────────────────
+  # Run from GitHub Actions tab → "Infra" → "Run workflow" button.
+  # Use this after updating the workflow file to validate it with the new code.
+  workflow_dispatch:
 
 # ─── Permissions ───────────────────────────────────────────────────────────────
 permissions:
-  id-token: write        # OIDC → AWS
+  id-token: write        # OIDC → AWS (no long-lived keys)
   contents: read
   pull-requests: write   # Post plan output as PR comment
-  security-events: write # Upload tfsec SARIF to Security tab
+  security-events: write # Upload tfsec SARIF to GitHub Security tab
 
 env:
   TF_WORKING_DIR: cargotrack-infra/environments/dev
@@ -30,8 +33,8 @@ env:
 
 jobs:
   # ════════════════════════════════════════════════════════════════════════════
-  # JOB 1: tfsec — Terraform security scan (runs first, fast)
-  # Scans all .tf files for misconfigurations (no AWS credentials needed).
+  # JOB 1: tfsec — Terraform security scan
+  # Scans all .tf files for misconfigurations. No AWS credentials needed.
   # ════════════════════════════════════════════════════════════════════════════
   tfsec:
     name: tfsec Security Scan
@@ -41,9 +44,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Install tfsec directly so we control the output file path.
-      # The tfsec-action@v1.0.0 sends SARIF to stdout (not a file), which
-      # causes "Path does not exist: results.sarif" on the upload step.
+      # Install tfsec CLI directly so we control the exact output file path.
+      # DO NOT use aquasecurity/tfsec-action@v1.0.0 — it pipes SARIF to stdout
+      # (not to a file), causing "Path does not exist: results.sarif" on upload.
       - name: Install tfsec
         run: |
           curl -sL \
@@ -52,17 +55,20 @@ jobs:
           chmod +x /usr/local/bin/tfsec
           tfsec --version
 
-      - name: Run tfsec
+      - name: Run tfsec and write SARIF to disk
         run: |
           tfsec cargotrack-infra \
             --format sarif \
             --soft-fail \
             --exclude-downloaded-modules \
             --minimum-severity MEDIUM \
-            --out results.sarif \
-            || true   # soft-fail: never block the pipeline, only report
+            --out results.sarif || true
+          # Verify file was written
+          echo "--- tfsec SARIF output ---"
+          ls -la results.sarif
+          echo "tfsec scan complete"
 
-      - name: Upload tfsec SARIF to GitHub Security
+      - name: Upload tfsec SARIF to GitHub Security tab
         if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
@@ -71,11 +77,16 @@ jobs:
 
   # ════════════════════════════════════════════════════════════════════════════
   # JOB 2: Terraform Validate & Plan
-  # Validates config and shows a complete plan.
-  # On PRs, the plan is posted as a PR comment.
+  # ─────────────────────────────────────────────────────────────────────────
+  # NOTE: This job uses -refresh=false and -lock=false because:
+  #   - The Kubernetes/Helm providers need EKS cluster API access during refresh,
+  #     which requires the GitHub Actions OIDC role to be in the cluster RBAC.
+  #     Rather than grant that, we skip refresh and plan against Terraform state.
+  #   - -lock=false avoids DynamoDB lock conflicts in parallel CI runs.
+  #   This means the plan shows config changes, not live drift. That is fine for CI.
   # ════════════════════════════════════════════════════════════════════════════
   terraform-plan:
-    name: Terraform Plan
+    name: Terraform Validate & Plan
     runs-on: ubuntu-latest
     needs: [tfsec]
 
@@ -88,8 +99,11 @@ jobs:
         with:
           terraform_version: "~1.9"
 
-      # Authenticate to AWS using OIDC — same role as CI pipeline
-      - name: Configure AWS credentials (OIDC)
+      # The GitHub Actions OIDC role (cargotrack-github-actions-ecr-push) now has
+      # AdministratorAccess (provisioned by modules/ecr/main.tf), so it can:
+      #   - Read S3 state bucket
+      #   - Run terraform plan against all AWS resource types
+      - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ECR_PUSH_ROLE_ARN }}
@@ -102,7 +116,7 @@ jobs:
       - name: Terraform Format Check
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform fmt -check -recursive
-        continue-on-error: true
+        continue-on-error: true   # Formatting issues are warnings, not errors
 
       - name: Terraform Validate
         working-directory: ${{ env.TF_WORKING_DIR }}
@@ -112,11 +126,18 @@ jobs:
         id: plan
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
-          terraform plan -input=false -no-color -out=tfplan 2>&1 | tee plan_output.txt
+          # -refresh=false: skip live state refresh (avoids Kubernetes provider auth)
+          # -lock=false:    skip DynamoDB lock (safe for read-only plan in CI)
+          terraform plan \
+            -input=false \
+            -no-color \
+            -refresh=false \
+            -lock=false \
+            2>&1 | tee plan_output.txt
           echo "exitcode=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
 
-      # Post the plan as a PR comment (only on pull requests)
-      - name: Comment plan on PR
+      # Post the plan as a PR comment (pull requests only)
+      - name: Post plan as PR comment
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
@@ -134,42 +155,23 @@ jobs:
             });
 
   # ════════════════════════════════════════════════════════════════════════════
-  # JOB 3: Terraform Apply (push to main/working branch only)
-  # NOTE: If you want a manual approval gate before apply, set up a GitHub
-  # Environment named "production" with required reviewers in:
-  #   Repository → Settings → Environments → production → Required reviewers
-  # Then uncomment the `environment: production` line below.
+  # JOB 3: Terraform Apply — DISABLED in CI
+  # ─────────────────────────────────────────────────────────────────────────
+  # Terraform apply is run LOCALLY from your dev machine:
+  #   cd cargotrack-infra/environments/dev && terraform apply
+  #
+  # Reason: auto-apply from CI would mutate live infrastructure on every push.
+  # If you want to enable it with a manual approval gate, set up a GitHub
+  # Environment named "production" with required reviewers, then:
+  #   1. Remove `if: false`
+  #   2. Uncomment `environment: production`
   # ════════════════════════════════════════════════════════════════════════════
   terraform-apply:
-    name: Terraform Apply
+    name: Terraform Apply (disabled)
     runs-on: ubuntu-latest
     needs: [terraform-plan]
-    # ── DISABLED: Apply is run locally with `terraform apply`, not from CI ──────
-    # Enabling auto-apply from CI risks infrastructure changes on every push.
-    # To enable: remove the `if: false` line and uncomment `environment: production`
-    # to add a required-reviewer approval gate before apply.
-    if: false
+    if: false   # ← Remove this line to enable auto-apply
     # environment: production
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "~1.9"
-
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ECR_PUSH_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Terraform Init
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform init -input=false
-
-      - name: Terraform Apply
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform apply -auto-approve -input=false
+      - run: echo "Apply is disabled in CI. Run terraform apply locally."

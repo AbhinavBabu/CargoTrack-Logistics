@@ -244,9 +244,12 @@ module "irsa" {
   app_secret_arn       = module.database.application_secret_arn
 }
 
-# ── ECR ───────────────────────────────────────────────────────────────────────
-# Provision 4 ECR repositories for CargoTrack microservice images.
-# The EKS node role is granted pull access via repository policies.
+# ──────────────────────────────────────────────────────────────────────────────
+# CargoTrack v3 — Dev Environment
+# Migrated from EC2/ASG → EKS microservices architecture
+# CI/CD managed by GitHub Actions (see .github/workflows/infra.yml)
+# ──────────────────────────────────────────────────────────────────────────────
+
 # Images must be pushed before pods can be scheduled (CI/CD responsibility).
 
 module "ecr" {
