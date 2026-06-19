@@ -380,6 +380,12 @@ resource "kubernetes_manifest" "cargotrack_dev_app" {
               name  = "aiService.env.TEXTRACT_ENABLED"
               value = "true"
             },
+            {
+              # Force Bedrock as the LLM provider for both compliance agent and Copilot.
+              # Without this, config.ts falls back to mock if LLM_PROVIDER is unset.
+              name  = "aiService.env.LLM_PROVIDER"
+              value = "bedrock"
+            },
           ]
 
         }

@@ -88,6 +88,8 @@ spec:
               value: {{ .Values.aiService.env.MOCK_AGENT | quote }}
             - name: TEXTRACT_ENABLED
               value: {{ .Values.aiService.env.TEXTRACT_ENABLED | default "false" | quote }}
+            - name: LLM_PROVIDER
+              value: {{ .Values.aiService.env.LLM_PROVIDER | default "bedrock" | quote }}
             {{- if .Values.aiService.env.BEDROCK_MODEL_ID }}
             - name: BEDROCK_MODEL_ID
               value: {{ .Values.aiService.env.BEDROCK_MODEL_ID | quote }}

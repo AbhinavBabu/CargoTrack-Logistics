@@ -2,8 +2,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # ECR registry and image tags are set here permanently.
 # The GitHub Actions workflow (build-push.yml) overwrites .image.registry and
-# *.tag on every push — this file holds the last-known-good values for the
-# manually-pushed v1 images.
+# *.tag on every push — this file holds the last-known-good values.
 # ─────────────────────────────────────────────────────────────────────────────
 
 global:
@@ -14,39 +13,40 @@ image:
   # ECR registry: <account_id>.dkr.ecr.<region>.amazonaws.com
   registry: "692828329130.dkr.ecr.us-east-1.amazonaws.com"
   pullPolicy: Always
-# ── Image tags — all services use the v1 manually-pushed tag ─────────────────
+# ── Image tags — all services use the latest pushed tag ──────────────────────
 # GitHub Actions overwrites these with the git SHA on every push.
 coreService:
-  tag: "9c5ed84812931680fb353616e64a6c35b14072b5"
+  tag: "fbbd901e3d1e9a6ab40d52a6b875e84e93b4f093"
   serviceAccount:
-    roleArn: "" # INJECT: terraform output irsa_core_service_role_arn
+    roleArn: "arn:aws:iam::692828329130:role/cargotrack-irsa-core-service"
 documentService:
-  tag: "9c5ed84812931680fb353616e64a6c35b14072b5"
+  tag: "fbbd901e3d1e9a6ab40d52a6b875e84e93b4f093"
   serviceAccount:
-    roleArn: "" # INJECT: terraform output irsa_document_service_role_arn
+    roleArn: "arn:aws:iam::692828329130:role/cargotrack-irsa-document-service"
 aiService:
-  tag: "9c5ed84812931680fb353616e64a6c35b14072b5"
+  tag: "fbbd901e3d1e9a6ab40d52a6b875e84e93b4f093"
   serviceAccount:
-    roleArn: "" # INJECT: terraform output irsa_ai_service_role_arn
+    roleArn: "arn:aws:iam::692828329130:role/cargotrack-irsa-ai-service"
   env:
-    MOCK_AGENT: "true" # Set to "false" when Bedrock access is confirmed
-    TEXTRACT_ENABLED: "false" # Set to "true" when Textract permissions verified
+    # ── FIXED: Real Bedrock + Textract enabled ─────────────────────────────
+    MOCK_AGENT: "false"
+    TEXTRACT_ENABLED: "true"
+    LLM_PROVIDER: "bedrock"
+    BEDROCK_MODEL_ID: "amazon.nova-lite-v1:0"
 frontend:
-  tag: "9c5ed84812931680fb353616e64a6c35b14072b5"
+  tag: "fbbd901e3d1e9a6ab40d52a6b875e84e93b4f093"
 # ── HPA — dev: enabled with default CPU targets ───────────────────────────────
 hpa:
   enabled: true
 # ── AWS resource connections ───────────────────────────────────────────────────
-# These are injected by the post-apply step or set manually after terraform apply.
-# Run: terraform output -json | jq to retrieve each value.
 aws:
   region: us-east-1
-  rdsEndpoint: "" # terraform output -raw rds_endpoint
+  rdsEndpoint: "" # terraform output -raw rds_endpoint (sensitive — injected at deploy time)
   rdsDatabase: cargotrack
   rdsUsername: cargotrack
-  s3BucketName: "" # terraform output -raw s3_bucket_name
-  eventBusName: "" # terraform output -raw event_bus_name
-  complianceQueueUrl: "" # terraform output -raw compliance_queue_url
-  auditTableName: "" # terraform output -raw dynamodb_audit_table
-  dbSecretArn: "" # terraform output -raw db_secret_arn
-  appSecretArn: "" # terraform output -raw application_secret_arn
+  s3BucketName: "cargotrack-documents"
+  eventBusName: "cargotrack-events"
+  complianceQueueUrl: "https://sqs.us-east-1.amazonaws.com/692828329130/cargotrack-compliance-trigger"
+  auditTableName: "cargotrack-audit"
+  dbSecretArn: "arn:aws:secretsmanager:us-east-1:692828329130:secret:cargotrack-database-secret-v2-qobXcc"
+  appSecretArn: "arn:aws:secretsmanager:us-east-1:692828329130:secret:cargotrack-application-secret-v2-xkPkv9"

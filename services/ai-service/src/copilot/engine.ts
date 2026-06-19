@@ -394,14 +394,49 @@ export class CopilotEngine {
     if (!text) return fallback;
 
     // Strip markdown code fences if present
-    const cleaned = text
+    let cleaned = text
       .replace(/^```(?:json)?\n?/m, '')
       .replace(/\n?```$/m, '')
       .trim();
 
+    // Try direct parse first
     try {
       return JSON.parse(cleaned) as T;
     } catch {
+      // Nova Lite sometimes wraps JSON in prose text.
+      // Find the first { or [ and extract the JSON block from there.
+      const objStart = cleaned.indexOf('{');
+      const arrStart = cleaned.indexOf('[');
+      let start = -1;
+      if (objStart !== -1 && arrStart !== -1) {
+        start = Math.min(objStart, arrStart);
+      } else {
+        start = Math.max(objStart, arrStart);
+      }
+
+      if (start !== -1) {
+        // Find matching closing bracket
+        const openChar = cleaned[start];
+        const closeChar = openChar === '{' ? '}' : ']';
+        let depth = 0;
+        let end = -1;
+        for (let i = start; i < cleaned.length; i++) {
+          if (cleaned[i] === openChar) depth++;
+          else if (cleaned[i] === closeChar) {
+            depth--;
+            if (depth === 0) { end = i; break; }
+          }
+        }
+        if (end !== -1) {
+          const extracted = cleaned.slice(start, end + 1);
+          try {
+            return JSON.parse(extracted) as T;
+          } catch {
+            // fall through
+          }
+        }
+      }
+
       console.warn('[CopilotEngine] Failed to parse LLM JSON response:', cleaned.slice(0, 200));
       return fallback;
     }
