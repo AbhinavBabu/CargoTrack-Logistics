@@ -81,12 +81,13 @@ jobs:
           node-version: '20'
 
       # Install dependencies for all services before scanning.
-      # Snyk test requires node_modules; npm ci is faster and reproducible.
+      # NOTE: npm ci requires package-lock.json. Since the repo does not commit
+      # lock files, we use npm install (creates node_modules from package.json).
       - name: Install dependencies for all services
         run: |
-          npm ci --prefix services/core-service
-          npm ci --prefix services/ai-service
-          npm ci --prefix services/document-service
+          npm install --prefix services/core-service
+          npm install --prefix services/ai-service
+          npm install --prefix services/document-service
 
       - name: Snyk scan — core-service
         uses: snyk/actions/node@master

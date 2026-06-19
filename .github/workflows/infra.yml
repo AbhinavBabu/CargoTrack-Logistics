@@ -126,16 +126,21 @@ jobs:
       - name: Terraform Plan
         id: plan
         working-directory: ${{ env.TF_WORKING_DIR }}
+        # continue-on-error: kubernetes_manifest resources always connect to the
+        # API server during plan even with -refresh=false. The CI role isn't in
+        # cluster RBAC, so this step may exit 1 for k8s resources. The plan
+        # output is still valid for all non-kubernetes changes. apply is done
+        # locally where kubeconfig is already configured.
+        continue-on-error: true
         run: |
-          # -refresh=false: skip live state refresh (avoids Kubernetes provider auth)
-          # -lock=false:    skip DynamoDB lock (safe for read-only plan in CI)
+          set -o pipefail   # ensure pipe exit code comes from terraform, not tee
           terraform plan \
             -input=false \
             -no-color \
             -refresh=false \
             -lock=false \
             2>&1 | tee plan_output.txt
-          echo "exitcode=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+          echo "exitcode=$?" >> $GITHUB_OUTPUT
 
       # Post the plan as a PR comment (pull requests only)
       - name: Post plan as PR comment
