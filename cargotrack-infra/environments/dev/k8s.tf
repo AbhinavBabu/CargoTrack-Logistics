@@ -351,6 +351,9 @@ resource "kubernetes_manifest" "cargotrack_dev_app" {
           ]
           # IRSA role ARNs injected by Terraform — these override the empty
           # roleArn fields in values-dev.yaml without requiring a file edit.
+          # MOCK_AGENT and TEXTRACT_ENABLED are also injected here so that
+          # enabling/disabling real Bedrock is a Terraform variable change,
+          # not a Git commit to values-dev.yaml.
           parameters = [
             {
               name  = "coreService.serviceAccount.roleArn"
@@ -364,7 +367,21 @@ resource "kubernetes_manifest" "cargotrack_dev_app" {
               name  = "aiService.serviceAccount.roleArn"
               value = module.irsa.ai_service_role_arn
             },
+            {
+              # Set to "false" to use real Amazon Bedrock (Nova Lite / Pro).
+              # Set to "true" to fall back to mock responses (no AWS calls).
+              # Requires model access enabled in AWS Console → Bedrock → Model access.
+              name  = "aiService.env.MOCK_AGENT"
+              value = "false"
+            },
+            {
+              # Set to "true" to enable Amazon Textract for document field extraction.
+              # Requires Textract permissions on the ai-service IRSA role (already granted).
+              name  = "aiService.env.TEXTRACT_ENABLED"
+              value = "true"
+            },
           ]
+
         }
       }
       destination = {
