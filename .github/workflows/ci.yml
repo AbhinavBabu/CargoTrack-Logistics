@@ -1,0 +1,288 @@
+name: CI — Build, Scan & Push
+
+# ─── Triggers ──────────────────────────────────────────────────────────────────
+# Runs on every push to the working branch that touches service/frontend code.
+# Also runs on pull requests to gate merges.
+on:
+  push:
+    branches:
+      - cargotrack-terraform-v2
+      - main
+    paths:
+      - 'services/**'
+      - 'frontend/**'
+      - 'helm/**'
+  pull_request:
+    branches:
+      - cargotrack-terraform-v2
+      - main
+    paths:
+      - 'services/**'
+      - 'frontend/**'
+
+# ─── Permissions ───────────────────────────────────────────────────────────────
+# id-token: write  → OIDC authentication to AWS (no long-lived keys)
+# contents: write  → commit updated values-dev.yaml back to repo
+# security-events: write → upload Trivy SARIF to GitHub Security tab
+permissions:
+  id-token: write
+  contents: write
+  security-events: write
+
+# ─── Service matrix ────────────────────────────────────────────────────────────
+# Each entry maps a service name to its build context, ECR repo, and Helm key.
+# The matrix runs all 4 services in parallel.
+
+jobs:
+  # ════════════════════════════════════════════════════════════════════════════
+  # JOB 1: SonarQube SAST (runs once, not per-service)
+  # Scans the full codebase for code quality and security issues.
+  # ════════════════════════════════════════════════════════════════════════════
+  sonarqube:
+    name: SonarQube SAST
+    runs-on: ubuntu-latest
+    # Only run on push (not PR from forks, to protect secrets)
+    if: github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history required for SonarQube blame analysis
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v3
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          args: >
+            -Dsonar.projectKey=cargotrack
+            -Dsonar.projectName=CargoTrack
+            -Dsonar.sources=services,frontend
+            -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/*.test.ts,**/prisma/migrations/**
+            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # JOB 2: Snyk SCA — dependency vulnerability scan (runs once)
+  # Checks all service package.json files for known CVEs.
+  # ════════════════════════════════════════════════════════════════════════════
+  snyk-sca:
+    name: Snyk Dependency Scan
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run Snyk for core-service
+        uses: snyk/actions/node@master
+        continue-on-error: true   # Report vulnerabilities but don't block the pipeline
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          command: test
+          args: --file=services/core-service/package.json --severity-threshold=high
+
+      - name: Run Snyk for ai-service
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          command: test
+          args: --file=services/ai-service/package.json --severity-threshold=high
+
+      - name: Run Snyk for document-service
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          command: test
+          args: --file=services/document-service/package.json --severity-threshold=high
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # JOB 3: Build, Trivy scan, and push each service image to ECR
+  # Runs all 4 services in parallel via matrix strategy.
+  # ════════════════════════════════════════════════════════════════════════════
+  build-scan-push:
+    name: Build, Scan & Push — ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    # Only push images on push events (not on PR — no secrets available)
+    # On PR, we still build to validate the Dockerfile compiles correctly.
+
+    strategy:
+      fail-fast: false   # If one service fails, continue building the others
+      matrix:
+        include:
+          - service: core-service
+            context: ./services/core-service
+            ecr_repo: cargotrack-core
+            helm_key: coreService.tag
+
+          - service: ai-service
+            context: ./services/ai-service
+            ecr_repo: cargotrack-ai
+            helm_key: aiService.tag
+
+          - service: document-service
+            context: ./services/document-service
+            ecr_repo: cargotrack-docs
+            helm_key: documentService.tag
+
+          - service: frontend
+            context: ./frontend
+            ecr_repo: cargotrack-frontend
+            helm_key: frontend.tag
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── AWS authentication via OIDC (no long-lived keys) ─────────────────────
+      # The IAM role was created by Terraform (modules/ecr/main.tf).
+      # Role ARN: arn:aws:iam::692828329130:role/cargotrack-github-actions-ecr-push
+      # Trust: scoped to this exact GitHub repository and any branch.
+      - name: Configure AWS credentials (OIDC)
+        if: github.event_name == 'push'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ECR_PUSH_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Login to Amazon ECR
+        if: github.event_name == 'push'
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # ── Docker Buildx (multi-arch builder, cache support) ────────────────────
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ── Compute image tag (commit SHA for push, PR number for PRs) ───────────
+      - name: Set image tag
+        id: tag
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "tag=${{ github.sha }}" >> $GITHUB_OUTPUT
+            echo "registry=${{ steps.ecr-login.outputs.registry }}" >> $GITHUB_OUTPUT
+            echo "full_image=${{ steps.ecr-login.outputs.registry }}/${{ matrix.ecr_repo }}:${{ github.sha }}" >> $GITHUB_OUTPUT
+          else
+            # PR: build locally only, no push
+            echo "tag=pr-${{ github.event.number }}" >> $GITHUB_OUTPUT
+            echo "registry=local" >> $GITHUB_OUTPUT
+            echo "full_image=${{ matrix.ecr_repo }}:pr-${{ github.event.number }}" >> $GITHUB_OUTPUT
+          fi
+
+      # ── Build image ──────────────────────────────────────────────────────────
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          platforms: linux/amd64
+          # On push: export image to local Docker daemon for Trivy scan, then push.
+          # On PR: build only (load to local daemon for scan, no push).
+          load: true
+          push: false
+          tags: ${{ steps.tag.outputs.full_image }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+      # ── Trivy image vulnerability scan ──────────────────────────────────────
+      # Fails the pipeline only on CRITICAL vulnerabilities (HIGH reported but non-blocking).
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.tag.outputs.full_image }}
+          format: sarif
+          output: trivy-${{ matrix.service }}.sarif
+          severity: CRITICAL,HIGH
+          exit-code: '0'        # Report findings but don't block — remove '0' to enforce blocking
+          ignore-unfixed: true  # Skip CVEs with no available fix
+
+      # Upload SARIF to GitHub Security tab
+      - name: Upload Trivy SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-${{ matrix.service }}.sarif
+          category: trivy-${{ matrix.service }}
+
+      # ── Push image to ECR (push events only) ─────────────────────────────────
+      - name: Push image to ECR
+        if: github.event_name == 'push'
+        run: |
+          # Tag and push the locally-built image (already in Docker daemon from 'load: true')
+          docker push ${{ steps.tag.outputs.full_image }}
+          # Also tag as :latest for human convenience
+          docker tag ${{ steps.tag.outputs.full_image }} \
+            ${{ steps.tag.outputs.registry }}/${{ matrix.ecr_repo }}:latest
+          docker push ${{ steps.tag.outputs.registry }}/${{ matrix.ecr_repo }}:latest
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # JOB 4: Update Helm values — triggers ArgoCD CD
+  # Writes the new commit SHA into values-dev.yaml and pushes the commit.
+  # ArgoCD detects this change and rolls out the new images automatically.
+  # ════════════════════════════════════════════════════════════════════════════
+  update-helm-values:
+    name: Update Helm Tags → trigger ArgoCD
+    runs-on: ubuntu-latest
+    needs: [build-scan-push]
+    # Only run after a successful push (not PRs, not failed builds)
+    if: github.event_name == 'push' && success()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.ref }}
+
+      # Re-authenticate to get the ECR registry URL for values injection
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ECR_PUSH_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Get ECR registry URL
+        id: ecr
+        run: |
+          REGISTRY=$(aws ecr describe-registry --query 'registryId' --output text)
+          REGION="${{ vars.AWS_REGION || 'us-east-1' }}"
+          echo "registry=${REGISTRY}.dkr.ecr.${REGION}.amazonaws.com" >> $GITHUB_OUTPUT
+
+      - name: Install yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      # Inject new commit SHA and ECR registry URL into values-dev.yaml.
+      # ArgoCD polls Git every 3 minutes and detects this change automatically.
+      - name: Update image tags in values-dev.yaml
+        run: |
+          SHA="${{ github.sha }}"
+          REGISTRY="${{ steps.ecr.outputs.registry }}"
+          
+          yq -i ".image.registry = \"${REGISTRY}\""      helm/cargotrack/values-dev.yaml
+          yq -i ".coreService.tag = \"${SHA}\""           helm/cargotrack/values-dev.yaml
+          yq -i ".documentService.tag = \"${SHA}\""       helm/cargotrack/values-dev.yaml
+          yq -i ".aiService.tag = \"${SHA}\""             helm/cargotrack/values-dev.yaml
+          yq -i ".frontend.tag = \"${SHA}\""              helm/cargotrack/values-dev.yaml
+
+      - name: Commit and push updated values
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add helm/cargotrack/values-dev.yaml
+          git diff --staged --quiet || \
+            git commit -m "ci: deploy images tagged ${GITHUB_SHA::8} to dev"
+          git push

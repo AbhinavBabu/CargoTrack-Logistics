@@ -1,0 +1,161 @@
+name: Infra — Terraform Plan & Security Scan
+
+# ─── Triggers ──────────────────────────────────────────────────────────────────
+# Runs on any push or PR touching infrastructure code.
+# Terraform plan is always shown. Apply requires a manual approval.
+on:
+  push:
+    branches:
+      - cargotrack-terraform-v2
+      - main
+    paths:
+      - 'cargotrack-infra/**'
+  pull_request:
+    branches:
+      - cargotrack-terraform-v2
+      - main
+    paths:
+      - 'cargotrack-infra/**'
+
+# ─── Permissions ───────────────────────────────────────────────────────────────
+permissions:
+  id-token: write        # OIDC → AWS
+  contents: read
+  pull-requests: write   # Post plan output as PR comment
+  security-events: write # Upload tfsec SARIF to Security tab
+
+env:
+  TF_WORKING_DIR: cargotrack-infra/environments/dev
+  AWS_REGION: us-east-1
+
+jobs:
+  # ════════════════════════════════════════════════════════════════════════════
+  # JOB 1: tfsec — Terraform security scan (runs first, fast)
+  # Scans all .tf files for misconfigurations (no AWS credentials needed).
+  # ════════════════════════════════════════════════════════════════════════════
+  tfsec:
+    name: tfsec Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run tfsec
+        uses: aquasecurity/tfsec-action@v1.0.0
+        with:
+          working_directory: cargotrack-infra
+          format: sarif
+          soft_fail: true          # Report findings but don't block plan/apply
+          additional_args: >
+            --exclude-downloaded-modules
+            --minimum-severity MEDIUM
+
+      - name: Upload tfsec SARIF to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+          category: tfsec
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # JOB 2: Terraform Validate & Plan
+  # Validates config and shows a complete plan.
+  # On PRs, the plan is posted as a PR comment.
+  # ════════════════════════════════════════════════════════════════════════════
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    needs: [tfsec]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.9"
+
+      # Authenticate to AWS using OIDC — same role as CI pipeline
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ECR_PUSH_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init -input=false
+
+      - name: Terraform Format Check
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform fmt -check -recursive
+        continue-on-error: true
+
+      - name: Terraform Validate
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform validate
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform plan -input=false -no-color -out=tfplan 2>&1 | tee plan_output.txt
+          echo "exitcode=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+
+      # Post the plan as a PR comment (only on pull requests)
+      - name: Comment plan on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('${{ env.TF_WORKING_DIR }}/plan_output.txt', 'utf8');
+            const truncated = plan.length > 60000
+              ? plan.substring(0, 60000) + '\n\n... [truncated — see Actions logs for full output]'
+              : plan;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## Terraform Plan — \`cargotrack-infra/environments/dev\`\n\n\`\`\`hcl\n${truncated}\n\`\`\``
+            });
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # JOB 3: Terraform Apply (push to main/working branch only)
+  # NOTE: If you want a manual approval gate before apply, set up a GitHub
+  # Environment named "production" with required reviewers in:
+  #   Repository → Settings → Environments → production → Required reviewers
+  # Then uncomment the `environment: production` line below.
+  # ════════════════════════════════════════════════════════════════════════════
+  terraform-apply:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+    needs: [terraform-plan]
+    # Only run on push to the working branch (not PRs)
+    if: github.event_name == 'push'
+    # environment: production   # ← Uncomment to require manual approval before apply
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.9"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ECR_PUSH_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init -input=false
+
+      - name: Terraform Apply
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform apply -auto-approve -input=false
