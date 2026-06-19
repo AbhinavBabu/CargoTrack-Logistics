@@ -11,6 +11,6 @@ variable "eks_node_role_arn" {
 variable "github_repository" {
   description = "GitHub repository in owner/repo format (e.g. AbhinavBabu/cargotrack-v2) — scopes the OIDC trust policy so only this repo can assume the ECR push role"
   type        = string
-  default     = "AbhinavBabu/Cargotrack-Logistics"
+  default     = "AbhinavBabu/CargoTrack-Logistics"
 }
 

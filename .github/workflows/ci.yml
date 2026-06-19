@@ -10,7 +10,7 @@ on:
       - 'services/**'
       - 'frontend/**'
       - 'helm/**'
-      - '.github/workflows/ci.yml'    # re-run when this file itself changes
+      - '.github/workflows/ci.yml'
   pull_request:
     branches:
       - cargotrack-terraform-v2
@@ -18,26 +18,19 @@ on:
     paths:
       - 'services/**'
       - 'frontend/**'
-  # ── Manual trigger ────────────────────────────────────────────────────────────
-  # Run from GitHub Actions tab → "CI" → "Run workflow" button.
-  # Use this to build and push all Docker images without needing a dummy commit.
   workflow_dispatch:
 
 # ─── Permissions ───────────────────────────────────────────────────────────────
 permissions:
-  id-token: write        # OIDC authentication to AWS (no long-lived keys)
-  contents: write        # Push updated values-dev.yaml back to repo
-  security-events: write # Upload Trivy SARIF to GitHub Security tab
-
-# ─── Helper: is this a "real" run that should push to ECR? ────────────────────
-# push events and manual workflow_dispatch both push images.
-# pull_request events only build (validate Dockerfile), never push.
+  id-token: write
+  contents: write
+  security-events: write
 
 jobs:
   # ════════════════════════════════════════════════════════════════════════════
   # JOB 1: SonarQube SAST
-  # Full-codebase static analysis. Runs once (not per-service).
-  # Secrets are not available in fork PRs, so skip on pull_request events.
+  # FIX: sonar.organization is now derived dynamically from github.repository_owner
+  # (lowercase), so no hardcoded org name is needed and no secret is required.
   # ════════════════════════════════════════════════════════════════════════════
   sonarqube:
     name: SonarQube SAST
@@ -48,17 +41,30 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Full git history required for SonarQube blame/diff analysis
+          fetch-depth: 0
+
+      # Derive the SonarCloud organization key from the GitHub repository owner.
+      # SonarCloud org keys are always lowercase (e.g. AbhinavBabu → abhinavbabu).
+      - name: Resolve SonarCloud organization key
+        id: sonar
+        run: |
+          ORG=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "org=${ORG}" >> $GITHUB_OUTPUT
+          echo "SonarCloud organization: ${ORG}"
 
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v3
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          args: >
+            -Dsonar.organization=${{ steps.sonar.outputs.org }}
 
   # ════════════════════════════════════════════════════════════════════════════
   # JOB 2: Snyk SCA — dependency vulnerability scan
-  # Checks package.json files for known CVEs. Non-blocking (continue-on-error).
+  # FIX: npm ci is run for each service before Snyk scans.
+  # Snyk requires node_modules to be present — it cannot scan package.json alone.
   # ════════════════════════════════════════════════════════════════════════════
   snyk-sca:
     name: Snyk Dependency Scan
@@ -74,8 +80,14 @@ jobs:
         with:
           node-version: '20'
 
-      # Each service is scanned independently. continue-on-error means
-      # vulnerabilities are reported but never block the pipeline.
+      # Install dependencies for all services before scanning.
+      # Snyk test requires node_modules; npm ci is faster and reproducible.
+      - name: Install dependencies for all services
+        run: |
+          npm ci --prefix services/core-service
+          npm ci --prefix services/ai-service
+          npm ci --prefix services/document-service
+
       - name: Snyk scan — core-service
         uses: snyk/actions/node@master
         continue-on-error: true
@@ -104,16 +116,18 @@ jobs:
           args: --file=services/document-service/package.json --severity-threshold=high
 
   # ════════════════════════════════════════════════════════════════════════════
-  # JOB 3: Build, Trivy image scan, and push to ECR
-  # Runs all 4 services in parallel via matrix strategy.
-  # On push/dispatch: builds and pushes to ECR.
-  # On PR:           builds only (validates Dockerfile), no push.
+  # JOB 3: Build, Trivy scan, push to ECR
+  # FIX (OIDC): The IAM role trust policy has been corrected to use the exact
+  #             case-sensitive repo name (CargoTrack-Logistics, not Cargotrack-Logistics).
+  #             This was the root cause of all OIDC authentication failures.
+  # FIX (Trivy): SARIF upload now uses continue-on-error so it never fails
+  #              the job when the file doesn't exist (e.g. if build was skipped).
   # ════════════════════════════════════════════════════════════════════════════
   build-scan-push:
     name: Build, Scan & Push — ${{ matrix.service }}
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false   # Don't cancel siblings if one service fails
+      fail-fast: false
       matrix:
         include:
           - service: core-service
@@ -136,10 +150,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ── AWS authentication via OIDC ───────────────────────────────────────────
-      # The IAM role (cargotrack-github-actions-ecr-push) was created by Terraform.
-      # It trusts this GitHub repository via OIDC — no long-lived AWS keys stored.
-      # Skip on pull_request events (fork PRs can't access repo secrets).
       - name: Configure AWS credentials via OIDC
         if: github.event_name != 'pull_request'
         uses: aws-actions/configure-aws-credentials@v4
@@ -155,9 +165,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # ── Compute image tags ────────────────────────────────────────────────────
-      # Push events & manual dispatch: use git SHA tag → deterministic + traceable
-      # PR events:                     use pr-NNN tag, build locally only (no push)
       - name: Resolve image references
         id: img
         run: |
@@ -173,9 +180,6 @@ jobs:
             echo "should_push=false" >> $GITHUB_OUTPUT
           fi
 
-      # ── Build Docker image ────────────────────────────────────────────────────
-      # load=true: export to local Docker daemon so Trivy can scan it by name.
-      # push=false: we push manually after Trivy scan (so broken images never land in ECR).
       - name: Build Docker image
         uses: docker/build-push-action@v6
         with:
@@ -187,9 +191,6 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
-      # ── Trivy image vulnerability scan ───────────────────────────────────────
-      # Scans the locally-built image. CRITICAL/HIGH findings are reported but
-      # never block the build (exit-code: '0'). Remove '0' to enforce blocking.
       - name: Trivy image scan
         uses: aquasecurity/trivy-action@master
         with:
@@ -200,16 +201,17 @@ jobs:
           exit-code: '0'
           ignore-unfixed: true
 
+      # FIX: continue-on-error=true so if a prior step was skipped (e.g. OIDC
+      # failure meant Docker build was skipped), a missing SARIF file never
+      # causes the entire job to fail. Upload is still attempted when possible.
       - name: Upload Trivy SARIF to GitHub Security tab
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-${{ matrix.service }}.sarif
           category: trivy-${{ matrix.service }}
 
-      # ── Push to ECR ──────────────────────────────────────────────────────────
-      # Runs only on push/dispatch events (not on PRs).
-      # Pushes both :<sha> (permanent, traceable) and :latest (convenience).
       - name: Push image to ECR
         if: steps.img.outputs.should_push == 'true'
         run: |
@@ -219,10 +221,7 @@ jobs:
           echo "✅ Pushed ${{ matrix.service }} → ${{ steps.img.outputs.full_image }}"
 
   # ════════════════════════════════════════════════════════════════════════════
-  # JOB 4: Update Helm values → trigger ArgoCD continuous delivery
-  # Writes the new commit SHA into values-dev.yaml and pushes the commit.
-  # ArgoCD polls Git every ~3 minutes, detects the tag change, and rolls out
-  # new pods automatically — no manual sync needed.
+  # JOB 4: Update Helm values → trigger ArgoCD
   # ════════════════════════════════════════════════════════════════════════════
   update-helm-values:
     name: Update Helm Tags → ArgoCD deploys
@@ -256,27 +255,22 @@ jobs:
             https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
           sudo chmod +x /usr/local/bin/yq
 
-      # Write the new commit SHA and ECR registry into values-dev.yaml.
-      # ArgoCD's auto-sync detects this git change and triggers a helm upgrade.
       - name: Update image tags in values-dev.yaml
         run: |
           SHA="${{ github.sha }}"
           REGISTRY="${{ steps.ecr.outputs.registry }}"
-
           yq -i ".image.registry = \"${REGISTRY}\""   helm/cargotrack/values-dev.yaml
           yq -i ".coreService.tag = \"${SHA}\""        helm/cargotrack/values-dev.yaml
           yq -i ".documentService.tag = \"${SHA}\""    helm/cargotrack/values-dev.yaml
           yq -i ".aiService.tag = \"${SHA}\""          helm/cargotrack/values-dev.yaml
           yq -i ".frontend.tag = \"${SHA}\""           helm/cargotrack/values-dev.yaml
-
-          echo "Updated values-dev.yaml with SHA=${SHA:0:8} and REGISTRY=${REGISTRY}"
+          echo "Updated values-dev.yaml with SHA=${SHA:0:8}"
 
       - name: Commit and push updated values
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git add helm/cargotrack/values-dev.yaml
-          # Only commit if values actually changed (idempotent)
           git diff --staged --quiet || \
             git commit -m "ci: deploy images tagged ${GITHUB_SHA::8} to dev [skip ci]"
           git push
