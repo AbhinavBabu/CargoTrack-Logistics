@@ -17,22 +17,22 @@ image:
 # ── Image tags — all services use the v1 manually-pushed tag ─────────────────
 # GitHub Actions overwrites these with the git SHA on every push.
 coreService:
-  tag: "65582458fef55b07b3a84a0878c1710e1be0fbed"
+  tag: "9c5ed84812931680fb353616e64a6c35b14072b5"
   serviceAccount:
     roleArn: "" # INJECT: terraform output irsa_core_service_role_arn
 documentService:
-  tag: "65582458fef55b07b3a84a0878c1710e1be0fbed"
+  tag: "9c5ed84812931680fb353616e64a6c35b14072b5"
   serviceAccount:
     roleArn: "" # INJECT: terraform output irsa_document_service_role_arn
 aiService:
-  tag: "65582458fef55b07b3a84a0878c1710e1be0fbed"
+  tag: "9c5ed84812931680fb353616e64a6c35b14072b5"
   serviceAccount:
     roleArn: "" # INJECT: terraform output irsa_ai_service_role_arn
   env:
     MOCK_AGENT: "true" # Set to "false" when Bedrock access is confirmed
     TEXTRACT_ENABLED: "false" # Set to "true" when Textract permissions verified
 frontend:
-  tag: "65582458fef55b07b3a84a0878c1710e1be0fbed"
+  tag: "9c5ed84812931680fb353616e64a6c35b14072b5"
 # ── HPA — dev: enabled with default CPU targets ───────────────────────────────
 hpa:
   enabled: true
