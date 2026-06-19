@@ -121,11 +121,11 @@ export class CopilotEngine {
 
     if (!shipment) throw new Error(`Shipment ${shipmentId} not found`);
 
-    // Extract document texts for context
+    // Extract document texts for context — run in parallel to avoid N×Textract-latency
     const docTexts: Record<string, string> = {};
-    for (const doc of docs) {
-      const extracted = await this.tools.extractDocumentText(doc);
-      docTexts[doc.documentType] = extracted.rawText.slice(0, 800); // truncate to stay within token budget
+    const extractions = await Promise.all(docs.map((doc) => this.tools.extractDocumentText(doc)));
+    for (let i = 0; i < docs.length; i++) {
+      docTexts[docs[i].documentType] = extractions[i].rawText.slice(0, 800);
     }
 
     const routeContext = this.tools.getRouteRiskContext(
@@ -249,11 +249,11 @@ export class CopilotEngine {
 
     if (!shipment) throw new Error(`Shipment ${shipmentId} not found`);
 
-    // Get doc texts for context (truncated to manage token budget)
+    // Get doc texts for context — run in parallel to avoid N×Textract-latency
     const docTexts: Record<string, string> = {};
-    for (const doc of docs) {
-      const extracted = await this.tools.extractDocumentText(doc);
-      docTexts[doc.documentType] = extracted.rawText.slice(0, 600);
+    const extractions = await Promise.all(docs.map((doc) => this.tools.extractDocumentText(doc)));
+    for (let i = 0; i < docs.length; i++) {
+      docTexts[docs[i].documentType] = extractions[i].rawText.slice(0, 600);
     }
 
     const userPrompt = buildQnAPrompt(shipment, docs, docTexts, report, question);
