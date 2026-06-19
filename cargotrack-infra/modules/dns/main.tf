@@ -88,6 +88,12 @@ resource "aws_route53_record" "cert_validation" {
   type    = each.value.type
   ttl     = 60
   records = [each.value.record]
+
+  # allow_overwrite = true is required when the certificate covers both the apex
+  # domain (shopp-novaa.co.in) and the wildcard (*.shopp-novaa.co.in).
+  # ACM issues the same CNAME validation record for both, so the for_each loop
+  # would otherwise fail with "record already exists" on the second iteration.
+  allow_overwrite = true
 }
 
 # ─── Certificate Validation Completion ───────────────────────────────────────
