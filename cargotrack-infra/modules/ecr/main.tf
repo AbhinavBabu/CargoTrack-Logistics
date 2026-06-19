@@ -212,3 +212,10 @@ resource "aws_iam_role_policy" "github_actions_ecr" {
   policy = data.aws_iam_policy_document.github_actions_ecr.json
 }
 
+# ─── GitHub Actions Terraform Permissions ─────────────────────────────────────
+# The CI/CD infra pipeline uses this role to run `terraform plan` and `terraform apply`.
+# `terraform apply` requires full permissions to provision EKS, RDS, VPC, IAM, etc.
+resource "aws_iam_role_policy_attachment" "github_actions_terraform_admin" {
+  role       = aws_iam_role.github_actions_ecr.name
+  policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess"
+}
