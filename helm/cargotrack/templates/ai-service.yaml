@@ -47,6 +47,12 @@ spec:
     metadata:
       labels:
         app: ai-service
+      annotations:
+        # Opt out of CloudWatch Observability OTel auto-instrumentation injection.
+        # The injected sidecar tries to push traces to port 4316 (OTLP gRPC on the
+        # CloudWatch agent) which is not accepting connections, flooding logs with
+        # ECONNREFUSED errors. Disable until OTel collector is explicitly configured.
+        instrumentation.opentelemetry.io/inject-nodejs: "false"
     spec:
       serviceAccountName: {{ .Values.aiService.serviceAccount.name }}
       # 60s grace: allow in-flight Bedrock calls and SQS message processing to complete

@@ -49,10 +49,13 @@ router.get('/:shipmentId', requireInternalSecret, async (req: Request, res: Resp
   try {
     const briefing = await engine.getBriefing(req.params.shipmentId);
     if (!briefing) {
-      res.status(404).json({ error: 'No briefing found for this shipment' });
+      // Return 202 (not 404) so the frontend knows to poll rather than show an error.
+      // Briefing generation is async — it may take 10-30s for Bedrock to respond.
+      // The frontend should retry GET /briefing/:id every 3s until it gets 200.
+      res.status(202).json({ status: 'generating', message: 'Briefing is being generated, please retry shortly' });
       return;
     }
-    res.json(briefing);
+    res.json({ status: 'ready', ...briefing });
   } catch (err: any) {
     console.error('[briefing-route] GET error:', err);
     res.status(500).json({ error: 'Failed to retrieve briefing' });

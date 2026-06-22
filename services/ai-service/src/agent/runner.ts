@@ -368,14 +368,18 @@ This makes your findings verifiable and auditable.`;
       console.log(`[Runner] Agent completed assessment after ${iterations} iterations`);
       const processingTimeMs = Date.now() - startTime;
 
-      // Update processingTimeMs on the report
-      await tools.finalizeReport({
-        reportId,
-        status: 'PASSED', // will be overwritten by finalize_risk_assessment tool call
-        summary: 'Assessment complete',
-        processingTimeMs,
-        modelId: config.bedrockModelId,
-      });
+      // Only update processingTimeMs — do NOT call finalizeReport() again.
+      // The Bedrock agent already called the 'finalize_risk_assessment' tool
+      // which wrote the real status/riskLevel/riskScore. Calling finalizeReport()
+      // here again with status='PASSED' overwrote the agent's real assessment,
+      // causing every run to show PASSED/N/A in the UI regardless of findings.
+      try {
+        const prisma = (tools as any).prisma as import('@prisma/client').PrismaClient;
+        await prisma.complianceReport.update({
+          where: { id: reportId },
+          data: { processingTimeMs },
+        });
+      } catch { /* non-critical — processingTimeMs is display-only */ }
       break;
     }
 

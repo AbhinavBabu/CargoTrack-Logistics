@@ -371,12 +371,14 @@ export class AgentTools implements AgentDataAccess {
         new PutItemCommand({
           TableName: config.dynamoAuditTable,
           Item: {
-            pk: { S: `SHIPMENT#${input.shipmentId}` },
-            sk: { S: `COMPLIANCE#${input.timestamp}` },
-            eventType: { S: input.eventType },
-            summary: { S: input.summary },
+            // Table schema: hash_key='shipmentId', range_key='timestamp'
+            // These MUST be present exactly as defined in Terraform or DynamoDB
+            // throws: "Missing the key shipmentId in the item"
+            shipmentId: { S: input.shipmentId },
+            timestamp:  { S: input.timestamp },
+            eventType:  { S: input.eventType },
+            summary:    { S: input.summary },
             agentRunId: { S: input.agentRunId },
-            timestamp: { S: input.timestamp },
           },
         })
       );
