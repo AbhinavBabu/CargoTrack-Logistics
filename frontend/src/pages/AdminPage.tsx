@@ -419,7 +419,9 @@ function DocumentDrawer({ shipment, onClose }: { shipment: Shipment; onClose: ()
     retry: false,
   });
 
-  // Route Intelligence Briefing — generated on shipment create
+  // Route Intelligence Briefing — generated asynchronously on shipment create.
+  // The backend returns { status: 'generating' } (HTTP 202) while Bedrock is running.
+  // We poll every 4s until status becomes 'ready', then stop.
   const { data: briefing } = useQuery<any>({
     queryKey: ['admin-briefing', shipment.id],
     queryFn: async () => {
@@ -427,6 +429,12 @@ function DocumentDrawer({ shipment, onClose }: { shipment: Shipment; onClose: ()
       return data;
     },
     retry: false,
+    // Refetch every 4s while status is 'generating'; stop once 'ready'
+    refetchInterval: (query) => {
+      const d = query.state.data as any;
+      if (!d || d.status === 'generating') return 4000;
+      return false; // stop polling once ready
+    },
     staleTime: 10 * 60 * 1000,
   });
 
@@ -504,12 +512,18 @@ function DocumentDrawer({ shipment, onClose }: { shipment: Shipment; onClose: ()
         <div className="flex-1 p-5 space-y-7">
 
           {/* ══ 0. Route Intelligence Briefing ═══════════════════════════ */}
-          {briefing && (
-            <section>
-              <div className="flex items-center gap-2 mb-3">
-                <Route className="w-4 h-4 text-indigo-400" />
-                <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Route Intelligence</h3>
+          <section>
+            <div className="flex items-center gap-2 mb-3">
+              <Route className="w-4 h-4 text-indigo-400" />
+              <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Route Intelligence</h3>
+              {briefing?.status === 'generating' && <Loader2 className="w-3 h-3 text-indigo-400 animate-spin ml-auto" />}
+            </div>
+            {(!briefing || briefing.status === 'generating') ? (
+              <div className="flex items-center gap-2 py-2 px-3 bg-slate-800/40 border border-slate-700/30 rounded-lg">
+                <Loader2 className="w-3.5 h-3.5 text-indigo-400 animate-spin flex-shrink-0" />
+                <p className="text-xs text-slate-500">Generating route intelligence brief via Amazon Nova Lite…</p>
               </div>
+            ) : (
               <div style={{
                 background: 'linear-gradient(135deg, rgba(15,23,42,0.95), rgba(30,41,59,0.95))',
                 border: '1px solid rgba(99,102,241,0.3)',
@@ -559,8 +573,9 @@ function DocumentDrawer({ shipment, onClose }: { shipment: Shipment; onClose: ()
                   </div>
                 )}
               </div>
-            </section>
-          )}
+            )}
+          </section>
+
 
           {/* ══ 1. AI Executive Brief ════════════════════════════════════ */}
           <section>
@@ -568,7 +583,21 @@ function DocumentDrawer({ shipment, onClose }: { shipment: Shipment; onClose: ()
               <Sparkles className="w-4 h-4 text-purple-400" />
               <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">AI Shipment Brief</h3>
             </div>
-            {summaryLoading ? <SectionLoader /> : copilotSummary ? <ExecutiveSummaryCard data={copilotSummary} /> : <p className="text-xs text-slate-600">Unable to generate summary.</p>}
+            {summaryLoading ? (
+              <SectionLoader />
+            ) : copilotSummary ? (
+              <ExecutiveSummaryCard data={copilotSummary} />
+            ) : (
+              // The executive summary is generated asynchronously after compliance.
+              // Show a soft pending state instead of a dead-end error so the user
+              // knows to wait or re-open the drawer once analysis is complete.
+              <div className="flex items-center gap-2 py-2">
+                <Loader2 className="w-3.5 h-3.5 text-slate-600 animate-spin flex-shrink-0" />
+                <p className="text-xs text-slate-600">
+                  Generating brief — this appears after the Risk Intelligence analysis completes.
+                </p>
+              </div>
+            )}
           </section>
 
           {/* ══ 2. Risk Intelligence Engine ══════════════════════════════ */}
